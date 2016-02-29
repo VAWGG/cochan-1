@@ -1,0 +1,56 @@
+{
+  "name": "cochan",
+  "version": "0.0.1",
+  "description": "Go-like channel communication primitive",
+  "author": "Sam Kozin <sam.kozin@gmail.com>",
+  "scripts": {
+    "prepublish": "babel ./es6 --presets es2015 --out-dir .",
+    "watch": "babel --watch ./es6 --presets es2015 --out-dir .",
+    "test": "echo 'Sorry, no tests yet' && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/skozin/cochan.git"
+  },
+  "keywords": [
+    "chan",
+    "channel",
+    "coroutine",
+    "csp",
+    "pubsub",
+    "pub-sub",
+    "async",
+    "await",
+    "generator",
+    "co",
+    "go",
+    "goroutine",
+    "concurrency",
+    "flow",
+    "control",
+    "promise",
+    "golang",
+    "es6",
+    "es2015",
+    "es7"
+  ],
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/skozin/cochan/issues"
+  },
+  "homepage": "https://github.com/skozin/cochan",
+  "dependencies": {},
+  "devDependencies": {
+    "babel-cli": "^6.5.1",
+    "babel-plugin-syntax-async-functions": "^6.5.0",
+    "babel-plugin-transform-async-to-generator": "^6.5.0",
+    "babel-preset-es2015": "^6.5.0",
+    "babel-register": "^6.5.2",
+    "co": "^4.6.0"
+  },
+  "files": [
+    "index.js",
+    "es6/index.js"
+  ],
+  "main": "index.js"
+}
