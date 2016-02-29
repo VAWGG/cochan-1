@@ -11,12 +11,54 @@ Depends on Promise being available.
 
 [golang channels]: https://tour.golang.org/concurrency/2
 
-You can find all examples inside the [_examples](_examples) directory. Run them
-by cloning this repo and typing `./run-example _examples/example_name.js` inside
-your terminal (requires Node 4 or later).
+You can find all examples inside the [_examples](_examples) directory.
+Run them by cloning this repo, doing `npm install` and then
+`./run-example _examples/example_name.js` (requires Node 4 or later).
 
 
-## Most basic example
+## Usage
+
+To install from NPM:
+
+```test
+npm i -S cochan
+```
+
+Basic usage with async/await:
+
+```js
+import chan from 'cochan'
+
+let ch = new chan()
+
+async function producerThatRespectsBackpressure() {
+  await ch.put('a')
+  await ch.put('b')
+  await ch.put('c')
+}
+
+function producerThatDoesntRespectBackpressure() {
+  ch.put(1)
+  ch.put(2)
+}
+
+async function consumer() {
+  while (true) {
+    let item = await ch
+    if (item == ch.CLOSED) break
+    console.log(`item: ${ item }`)
+  }
+}
+
+producerThatRespectsBackpressure()
+producerThatDoesntRespectBackpressure()
+consumer()
+
+// output: a, 1, 2, b, c
+```
+
+
+## Basic buffering
 
 With ES7 async/await:
 
@@ -70,42 +112,8 @@ This example yields the following output:
 [P] channel closed
 ```
 
-The same with generators and co:
-
-```js
-import co from 'co'
-import chan from 'cochan'
-
-// allow buffering up to 3 items without blocking
-let ch = new chan(3)
-
-function* $producer(items) {
-  for (let item of items) {
-    console.log(`[P] putting item: ${ item }...`)
-    yield ch.put(item)
-  }
-  console.log(`[P] closing channel...`)
-  yield ch.close()
-  console.log(`[P] channel closed`)
-}
-
-function* $consumer() {
-  while (true) {
-    let item = yield ch
-    if (item == ch.CLOSED) break
-    console.log(`[c] got item: ${ item }`)
-  }
-  console.log(`[c] finished`)
-}
-
-co(function*() {
-  co($producer([ 1, 2, 3, 4, 5 ]))
-  yield chan.delay(10)
-  co($consumer())
-})
-```
-
-[The same with Promises](_examples/basic-promise.js).
+* [The same example with generators and co](_examples/basic-gen.js)
+* [The same with Promises](_examples/basic-promise.js)
 
 
 ## TODO
