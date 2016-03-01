@@ -1,4 +1,4 @@
-var chan = require('..')
+var chan = require('../..')
 
 // allow buffering up to 3 items without blocking
 var ch = new chan(3)
