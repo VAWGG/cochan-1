@@ -43,36 +43,48 @@ class Chan extends BaseChan
     return this._state >= STATE_CLOSING
   }
 
-  tryPut(val) {
+  tryPutError(err) {
+    return this.tryPut(err, true)
+  }
+
+  putError(err, close) {
+    if (close) {
+      return this.put(err, true).then(() => this.close())
+    } else {
+      return this.put(err, true)
+    }
+  }
+
+  tryPut(val, isError) {
     if (this._state >= STATE_CLOSING) {
       throw new Error('attempt to put into a closed channel')
     }
-    if (this._state == STATE_HAS_WAITING_CONSUMERS && this._sendToWaitingConsumer(val)) {
+    if (this._state == STATE_HAS_WAITING_CONSUMERS && this._sendToWaitingConsumer(val, isError)) {
       return true
     }
     if (this._state == STATE_NORMAL && this._buffer.length < this._bufferSize) {
-      this._buffer.push({ val, fnVal: undefined, fnErr: undefined })
+      this._buffer.push({ val, isError, fnVal: undefined, fnErr: undefined })
       return true
     }
     return false
   }
 
-  put(val) {
+  put(val, isError) {
     if (this._state >= STATE_CLOSING) {
       return Promise.reject(new Error('attempt to put into a closed channel'))
     }
 
-    if (this._state == STATE_HAS_WAITING_CONSUMERS && this._sendToWaitingConsumer(val)) {
+    if (this._state == STATE_HAS_WAITING_CONSUMERS && this._sendToWaitingConsumer(val, isError)) {
       return P_RESOLVED
     } // else state is STATE_NORMAL
 
     if (this._buffer.length < this._bufferSize) {
-      this._buffer.push({ val, fnVal: undefined, fnErr: undefined })
+      this._buffer.push({ val, isError, fnVal: undefined, fnErr: undefined })
       return P_RESOLVED
     }
 
     return new Promise((res, rej) => {
-      this._buffer.push({ val, fnVal: res, fnErr: rej })
+      this._buffer.push({ val, isError, fnVal: res, fnErr: rej })
     })
   }
 
@@ -101,12 +113,16 @@ class Chan extends BaseChan
       }
     }
 
+    if (item.isError) {
+      throw item.val
+    }
+
     return item.val
   }
 
   _take(fnVal, fnErr, needsCancelFn) {
     if (this._state == STATE_CLOSED) {
-      fnVal(CLOSED)
+      fnVal && fnVal(CLOSED)
       return nop
     }
 
@@ -127,8 +143,8 @@ class Chan extends BaseChan
       closeFns = this._buffer.shift().fns
     }
 
-    fnVal(item.val)
-    item.fnVal && item.fnVal()
+    let fn = item.isError ? fnErr : fnVal
+    fn && fn(item.val)
 
     if (closeFns) {
       for (let i = 0; i < closeFns.length; ++i) {
@@ -146,7 +162,7 @@ class Chan extends BaseChan
     if (this._state == STATE_HAS_WAITING_CONSUMERS || this._buffer.length == 0) {
       this._state = STATE_HAS_WAITING_CONSUMERS
       return new Promise(resolve => {
-        this._buffer.push({ fnVal: resolve, fnErr: undefined, consumes: false })
+        this._buffer.push({ fnVal: resolve, fnErr: resolve, consumes: false })
       })
     }
     return P_RESOLVED
@@ -226,17 +242,19 @@ class Chan extends BaseChan
     }
   }
 
-  _sendToWaitingConsumer(val) {
+  _sendToWaitingConsumer(val, isError) {
     let item = this._buffer.shift()
     while (item && !item.consumes) {
-      item.fnVal && item.fnVal()
+      let fn = isError ? item.fnErr : item.fnVal
+      fn && fn()
       item = this._buffer.shift()
     }
     if (!item) {
       this._state = STATE_NORMAL
       return false
     }
-    item.fnVal && item.fnVal(val)
+    let fn = isError ? item.fnErr : item.fnVal
+    fn && fn(val)
     if (this._buffer.length == 0) {
       this._state = STATE_NORMAL
     }
