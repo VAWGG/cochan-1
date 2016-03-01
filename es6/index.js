@@ -2,6 +2,7 @@ import BaseChan from './base-chan'
 import {P_RESOLVED, CLOSED, FAILED, nop} from './constants'
 import {TimeoutChan, DelayChan} from './special-chans'
 import {trySelect, select} from './select'
+import applyEventEmitter from './apply-event-emitter'
 
 
 const STATE_NORMAL = 0
@@ -22,6 +23,12 @@ class Chan extends BaseChan
 
   static delay(ms, value) {
     return new DelayChan(ms, value)
+  }
+
+  static fromEventEmitter(emitter, bufferSize = 0) {
+    let chan = new Chan(bufferSize)
+    applyEventEmitter(emitter, chan, true, true)
+    return chan
   }
 
   constructor(bufferSize = 0) {
