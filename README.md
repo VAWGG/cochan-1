@@ -39,8 +39,8 @@ async function producerThatRespectsBackpressure() {
 }
 
 function producerThatDoesntRespectBackpressure() {
-  ch.put(1)
-  ch.put(2)
+  ch.put('1')
+  ch.put('2')
 }
 
 async function consumer() {
@@ -57,6 +57,31 @@ consumer()
 
 // outputs: a, 1, 2, b, c
 ```
+
+Selection from multiple channels:
+
+```js
+import chan from 'cochan'
+
+async function someFunc(ch1, ch2) {
+  // this line will throw on timeout
+  let sel = await chan.select(ch1, ch2, chan.timeout(5000))
+  switch (sel.chan) {
+    case ch1:
+      await doSmthWithValueFromCh1(sel.value)
+      break
+    case ch2:
+      await doSmthWithValueFromCh2(sel.value)
+      break
+    case chan.CLOSED:
+      await handleBothCh1AndCh2Closed()
+      break
+  }
+}
+```
+
+When several channels have some value, the channel to take value from
+is selected randomly.
 
 
 ## Basic buffering
@@ -123,4 +148,4 @@ See [this example](_examples/async-await/2-select.js)
 ## TODO
 
 * API docs.
-* More examples (non-blocking, wait, real-world).
+* More examples (non-blocking, wait, delay, real-world).
