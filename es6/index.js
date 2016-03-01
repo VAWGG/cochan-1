@@ -12,6 +12,10 @@ const STATE_CLOSED = 3
 
 class Chan extends BaseChan
 {
+  static isChan(obj) {
+    return obj instanceof BaseChan
+  }
+
   static timeout(ms, message) {
     return new TimeoutChan(ms, message)
   }

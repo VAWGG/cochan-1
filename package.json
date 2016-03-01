@@ -1,7 +1,7 @@
 {
   "name": "cochan",
-  "version": "0.1.1",
-  "description": "Go-like channel communication primitive",
+  "version": "0.1.2",
+  "description": "Channel communication primitive",
   "author": "Sam Kozin <sam.kozin@gmail.com>",
   "scripts": {
     "prepublish": "babel ./es6 --presets es2015 --out-dir ./lib",
