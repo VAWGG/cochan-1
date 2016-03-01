@@ -1,11 +1,11 @@
 {
   "name": "cochan",
-  "version": "0.0.1",
+  "version": "0.1.1",
   "description": "Go-like channel communication primitive",
   "author": "Sam Kozin <sam.kozin@gmail.com>",
   "scripts": {
-    "prepublish": "babel ./es6 --presets es2015 --out-dir .",
-    "watch": "babel --watch ./es6 --presets es2015 --out-dir .",
+    "prepublish": "babel ./es6 --presets es2015 --out-dir ./lib",
+    "watch": "babel --watch ./es6 --presets es2015 --out-dir ./lib",
     "test": "echo 'Sorry, no tests yet' && exit 1"
   },
   "repository": {
@@ -49,8 +49,8 @@
     "co": "^4.6.0"
   },
   "files": [
-    "index.js",
-    "es6/index.js"
+    "es6",
+    "lib"
   ],
-  "main": "index.js"
+  "main": "lib/index.js"
 }

@@ -1,8 +1,8 @@
+import BaseChan from './base-chan'
+import {P_RESOLVED, CLOSED, FAILED, nop} from './constants'
+import {TimeoutChan, DelayChan} from './special-chans'
+import {trySelect, select} from './select'
 
-const CLOSED = { desc: '<closed>', inspect: () => '<closed>', toString: () => '<closed>' }
-const FAILED = { desc: '<failed>', inspect: () => '<failed>', toString: () => '<failed>' }
-
-const P_RESOLVED = Promise.resolve()
 
 const STATE_NORMAL = 0
 const STATE_HAS_WAITING_CONSUMERS = 1
@@ -10,102 +10,39 @@ const STATE_CLOSING = 2
 const STATE_CLOSED = 3
 
 
-class Chan
+class Chan extends BaseChan
 {
-  static delay(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms))
-  }
-
   static timeout(ms, message) {
-    return new Promise((_, reject) => {
-      setTimeout(() => reject(new Error(message || `timeout of ${ms} ms exceeded`)), ms)
-    })
+    return new TimeoutChan(ms, message)
   }
 
-  static trySelect(chans) {
-    if (arguments.length > 1) {
-      chans = arguments
-    }
-    let anyNotClosed = false
-    for (let i = 0; i < chans.length; ++i) {
-      let val = chans[i].tryTake()
-      if (val !== CLOSED) {
-        if (val !== FAILED) {
-          return val
-        }
-        anyNotClosed = true
-      }
-    }
-    return anyNotClosed ? FAILED : CLOSED
-  }
-
-  static select(chans) {
-    let val = Chan.trySelect.apply(Chan, arguments)
-    if (val !== FAILED) {
-      return Promise.resolve(val)
-    }
-
-    if (arguments.length > 1) {
-      chans = arguments
-    }
-
-    let fnVal, fnErr
-    let promise = new Promise((res, rej) => { fnVal = res; fnErr = rej })
-    let cancelFns = []
-    let numClosed = 0
-
-    for (let i = 0; i < chans.length; ++i) {
-      let chan = chans[i]
-      if (chan.mayHaveMore) {
-        cancelFns.push(chan.takeExt(onValue, onError, true))
-      }
-    }
-
-    function onValue(val) {
-      if (val === CLOSED && ++numClosed < cancelFns.length) {
-        return
-      }
-      unsub()
-      fnVal(val)
-    }
-
-    function onError(err) {
-      unsub()
-      fnErr(err)
-    }
-
-    function unsub() {
-      for (let i = 0; i < cancelFns.length; ++i) {
-        cancelFns[i]()
-      }
-    }
-
-    return promise
+  static delay(ms, value) {
+    return new DelayChan(ms, value)
   }
 
   constructor(bufferSize = 0) {
+    super()
     this._state = STATE_NORMAL
     this._bufferSize = bufferSize
     this._buffer = []
   }
 
   get mayHaveMore() {
-    return this._state < STATE_CLOSING || this._buffer.length
+    return this._state < STATE_CLOSING || !!this._buffer.length
+  }
+
+  get hasMore() {
+    return this._state != STATE_HAS_WAITING_CONSUMERS && !!this._buffer.length
   }
 
   get isClosingOrClosed() {
     return this._state >= STATE_CLOSING
   }
 
-  get isClosing() {
-    return this._state == STATE_CLOSING
-  }
-
-  get isClosed() {
-    return this._state == STATE_CLOSED
-  }
-
   tryPut(val) {
+    if (this._state >= STATE_CLOSING) {
+      throw new Error('attempt to put into a closed channel')
+    }
     if (this._state == STATE_HAS_WAITING_CONSUMERS && this._sendToWaitingConsumer(val)) {
       return true
     }
@@ -145,24 +82,25 @@ class Chan
     } // else state is either STATE_NORMAL or STATE_CLOSING
 
     let item = this._buffer.shift()
+    let closeFns = undefined
+
+    if (this._state == STATE_CLOSING && this._buffer.length == 1) {
+      this._state = STATE_CLOSED
+      closeFns = this._buffer.shift().fns
+    }
+
     item.fnVal && item.fnVal()
     
-    if (this._state == STATE_CLOSING && this._buffer.length == 1) {
-      let fns = this._buffer[0].fns
-      for (let i = 0; i < fns.length; ++i) {
-        fns[i]()
+    if (closeFns) {
+      for (let i = 0; i < closeFns.length; ++i) {
+        closeFns[i]()
       }
-      this._close()
     }
 
     return item.val
   }
 
-  take() {
-    return new Promise((res, rej) => this.takeExt(res, rej, false))
-  }
-
-  takeExt(fnVal, fnErr, needsCancelFn) {
+  _take(fnVal, fnErr, needsCancelFn) {
     if (this._state == STATE_CLOSED) {
       fnVal(CLOSED)
       return nop
@@ -178,15 +116,20 @@ class Chan
     }
 
     let item = this._buffer.shift()
+    let closeFns = undefined
+
+    if (this._state == STATE_CLOSING && this._buffer.length == 1) {
+      this._state = STATE_CLOSED
+      closeFns = this._buffer.shift().fns
+    }
+
     fnVal(item.val)
     item.fnVal && item.fnVal()
 
-    if (this._state == STATE_CLOSING && this._buffer.length == 1) {
-      let fns = this._buffer[0].fns
-      for (let i = 0; i < fns.length; ++i) {
-        fns[i]()
+    if (closeFns) {
+      for (let i = 0; i < closeFns.length; ++i) {
+        closeFns[i]()
       }
-      this._close()
     }
 
     return nop
@@ -210,12 +153,12 @@ class Chan
       return true
     }
     if (this._buffer.length == 0) {
-      this._close()
+      this._state = STATE_CLOSED
       return true
     }
     if (this._state == STATE_HAS_WAITING_CONSUMERS) {
-      this._sendToAllWaitingConsumers(CLOSED)
-      this._close()
+      this._state = STATE_CLOSED
+      this._terminateAllWaitingConsumers()
       return true
     }
     return false
@@ -227,13 +170,13 @@ class Chan
     }
 
     if (this._buffer.length == 0) {
-      this._close()
+      this._state = STATE_CLOSED
       return P_RESOLVED
     }
 
     if (this._state == STATE_HAS_WAITING_CONSUMERS) {
-      this._sendToAllWaitingConsumers(CLOSED)
-      this._close()
+      this._state = STATE_CLOSED
+      this._terminateAllWaitingConsumers()
       return P_RESOLVED
     }
 
@@ -256,13 +199,15 @@ class Chan
       return
     }
 
-    if (this._state == STATE_HAS_WAITING_CONSUMERS) {
-      this._sendToAllWaitingConsumers(CLOSED)
-      this._close()
+    let prevState = this._state
+    this._state = STATE_CLOSED
+
+    if (prevState == STATE_HAS_WAITING_CONSUMERS) {
+      this._terminateAllWaitingConsumers()
       return P_RESOLVED
     }
 
-    if (this._state == STATE_CLOSING) {
+    if (prevState == STATE_CLOSING) {
       let fns = this._buffer.pop().fns
       for (let i = 0; i < fns.length; ++i) {
         fns[i]()
@@ -271,12 +216,10 @@ class Chan
 
     let err = new Error('channel closed')
 
-    for (let i = 0; i < this._buffer.length; ++i) {
-      let fnErr = this._buffer[i].fnErr
+    while (this._buffer.length) {
+      let {fnErr} = this._buffer.shift()
       fnErr && fnErr(err)
     }
-
-    this._close()
   }
 
   _sendToWaitingConsumer(val) {
@@ -289,61 +232,18 @@ class Chan
       this._state = STATE_NORMAL
       return false
     }
-    item.fnVal(val)
+    item.fnVal && item.fnVal(val)
     if (this._buffer.length == 0) {
       this._state = STATE_NORMAL
     }
     return true
   }
 
-  _sendToAllWaitingConsumers(val) {
-    for (let i = 0; i < this._buffer.length; ++i) {
-      let item = this._buffer[i]
-      item.fnVal && item.fnVal(item.consumes ? val : undefined)
+  _terminateAllWaitingConsumers() {
+    while (this._buffer.length) {
+      let item = this._buffer.shift()
+      item.fnVal && item.fnVal(item.consumes ? CLOSED : undefined)
     }
-  }
-
-  _close() {
-    this._buffer.length = 0
-    this._state = STATE_CLOSED
-  }
-
-  then(fnVal, fnErr) {
-    return new Promise((resolve, reject) => {
-      this.takeExt(
-        (v) => {
-          if (!fnVal) {
-            return resolve(v)
-          }
-          try {
-            resolve(fnVal(v))
-          } catch (err) {
-            if (!fnErr) {
-              return reject(err)
-            }
-            try {
-              resolve(fnErr(err))
-            } catch (err2) {
-              reject(err2)
-            }
-          }
-        },
-        (e) => {
-          if (!fnErr) {
-            return reject(e)
-          }
-          try {
-            resolve(fnErr(e))
-          } catch (err) {
-            reject(err)
-          }
-        }
-      )
-    })
-  }
-
-  catch(fnErr) {
-    return this.then(undefined, fnErr)
   }
 }
 
@@ -351,14 +251,22 @@ class Chan
 Chan.CLOSED = CLOSED
 Chan.FAILED = FAILED
 
+Chan.trySelect = trySelect
+Chan.select = select
+
+
+BaseChan.prototype.CLOSED = CLOSED
+BaseChan.prototype.FAILED = FAILED
+
+BaseChan.prototype.delay = Chan.delay
+BaseChan.prototype.timeout = Chan.timeout
+
+
 Chan.prototype.CLOSED = CLOSED
 Chan.prototype.FAILED = FAILED
 
 Chan.prototype.delay = Chan.delay
 Chan.prototype.timeout = Chan.timeout
-
-
-function nop() {}
 
 
 module.exports = Chan
