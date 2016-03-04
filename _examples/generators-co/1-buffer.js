@@ -26,6 +26,6 @@ function* $consumer() {
 
 co(function*() {
   co($producer([ 1, 2, 3, 4, 5 ]))
-  yield chan.delay(100)
+  yield chan.delay(500)
   co($consumer())
 })

@@ -25,6 +25,6 @@ async function consumer() {
 
 (async function() {
   producer([ 1, 2, 3, 4, 5 ])
-  await chan.delay(100)
+  await chan.delay(500)
   consumer()
 })()
