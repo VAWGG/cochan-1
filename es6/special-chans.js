@@ -34,7 +34,7 @@ class BaseDelayChan extends BaseChan
   }
 
   wait() {
-    if (this.hasMore) {
+    if (this.canTakeSync) {
       return P_RESOLVED
     }
     return new Promise(resolve => {
@@ -76,15 +76,23 @@ export class TimeoutChan extends BaseDelayChan
     this._message = message
   }
 
-  get mayHaveMore() {
-    return true
+  get canPut() {
+    return false
   }
 
-  get hasMore() {
+  get canPutSync() {
+    return false
+  }
+
+  get canTakeSync() {
     return Date.now() >= this._timeoutDate
   }
 
   get isClosingOrClosed() {
+    return false
+  }
+
+  get isClosed() {
     return false
   }
 
@@ -131,11 +139,15 @@ export class DelayChan extends BaseDelayChan
     this._closed = false
   }
 
-  get mayHaveMore() {
-    return !this._closed
+  get canPut() {
+    return false
   }
 
-  get hasMore() {
+  get canPutSync() {
+    return false
+  }
+
+  get canTakeSync() {
     return !this._closed && Date.now() >= this._timeoutDate
   }
 
@@ -143,8 +155,12 @@ export class DelayChan extends BaseDelayChan
     return this._closed
   }
 
+  get isClosed() {
+    return this._closed
+  }
+
   tryTake() {
-    if (!hasMore) {
+    if (!this.canTakeSync) {
       return FAILED
     }
     this._close()

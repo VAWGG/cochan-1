@@ -23,13 +23,13 @@ export function trySelect(chans) {
   
   for (let i = 0; i < chans.length; ++i) {
     let chan = chans[i]
-    if (chan.hasMore) {
+    if (chan.canTakeSync) {
       if (chan instanceof TimeoutChan) {
         timeoutChan = chan
       } else {
         chansWithData.push(chan)
       }
-    } else if (!chan.isClosingOrClosed && !(chan instanceof TimeoutChan)) {
+    } else if (!(chan.isClosed || chan instanceof TimeoutChan)) {
       hasAliveDataChans = true
     }
   }
@@ -71,7 +71,7 @@ export function select(chans) {
 
   for (let i = 0; i < chans.length; ++i) {
     let chan = chans[i]
-    if (chan.mayHaveMore) {
+    if (!chan.isClosed) {
       cancelFns.push(chan._take(v => onValue(v, chan), onError, true))
     }
   }
