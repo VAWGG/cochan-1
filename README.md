@@ -1,7 +1,7 @@
 # cochan
 
 Channel communication primitive, modelled after [golang channels]. Useful for
-communication between concurrent processes, e.g. coroutines. Plays especially
+communication between concurrent activities, e.g. coroutines. Plays especially
 well with generators or ES7 async/await, but doesn't depend on these language
 features. Depends on `Promise` being available.
 
