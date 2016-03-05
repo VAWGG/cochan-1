@@ -95,7 +95,7 @@ class Chan extends BaseChan
     }
     // the only possible state now is STATE_NORMAL
 
-    if (this._buffer.length < this._bufferSize) {
+    if (this._buffer.length - this._totalWaiters < this._bufferSize) {
       this._buffer.push({ val, type: isError ? TYPE_ERROR : TYPE_VALUE,
         fnVal: undefined, fnErr: undefined })
       waiters && this._triggerWaiters(waiters, val, isError)
@@ -127,7 +127,7 @@ class Chan extends BaseChan
     }
     // the only possible state now is STATE_NORMAL
 
-    if (this._buffer.length < this._bufferSize) {
+    if (this._buffer.length - this._totalWaiters < this._bufferSize) {
       this._buffer.push({ val, type: isError ? TYPE_ERROR : TYPE_VALUE,
         fnVal: undefined, fnErr: undefined })
       waiters && this._triggerWaiters(waiters, val, isError)
