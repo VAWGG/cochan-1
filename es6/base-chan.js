@@ -1,13 +1,25 @@
 
 export default class BaseChan
 {
+  constructor() {
+    this._thenable = new BaseChanThenable(this)
+  }
+
   take() {
-    return new Promise((res, rej) => this._take(res, rej, false))
+    return this._thenable
+  }
+}
+
+
+class BaseChanThenable
+{
+  constructor(chan) {
+    this._chan = chan
   }
 
   then(fnVal, fnErr) {
     return new Promise((resolve, reject) => {
-      this._take(
+      this._chan._take(
         (v) => {
           if (!fnVal) {
             return resolve(v)

@@ -1,5 +1,6 @@
 import BaseChan from './base-chan'
-import {P_RESOLVED, CLOSED, FAILED, nop} from './constants'
+import {P_RESOLVED_WITH_FALSE, P_RESOLVED_WITH_TRUE} from './constants'
+import {CLOSED, FAILED, nop} from './constants'
 
 
 class BaseDelayChan extends BaseChan
@@ -13,16 +14,16 @@ class BaseDelayChan extends BaseChan
     this._timeoutBound = () => this._timeout()
   }
 
-  tryPut(val) {
-    throw new Error(`tryPut() is unsupported by ${ this.constructor.name }`)
+  putSync(val) {
+    throw new Error(`putSync() is unsupported by ${ this.constructor.name }`)
   }
 
   put(val) {
     throw new Error(`put() is unsupported by ${ this.constructor.name }`)
   }
 
-  tryClose() {
-    throw new Error(`tryClose() is unsupported by ${ this.constructor.name }`)
+  closeSync() {
+    throw new Error(`closeSync() is unsupported by ${ this.constructor.name }`)
   }
 
   close() {
@@ -33,14 +34,18 @@ class BaseDelayChan extends BaseChan
     throw new Error(`closeNow() is unsupported by ${ this.constructor.name }`)
   }
 
-  wait() {
+  maybeCanTakeSync() {
     if (this.canTakeSync) {
-      return P_RESOLVED
+      return P_RESOLVED_WITH_TRUE
     }
     return new Promise(resolve => {
-      let fn = () => resolve()
+      let fn = val => resolve(val == CLOSED ? false : true)
       this._take(fn, fn, false)
     })
+  }
+
+  maybeCanPutSync() {
+    return this.isClosed ? P_RESOLVED_WITH_FALSE : P_RESOLVED_WITH_TRUE
   }
 
   _addConsumer(fn, needsCancelFn, now) {
@@ -76,6 +81,10 @@ export class TimeoutChan extends BaseDelayChan
     this._message = message
   }
 
+  get value() {
+    return undefined
+  }
+
   get canPut() {
     return false
   }
@@ -96,9 +105,9 @@ export class TimeoutChan extends BaseDelayChan
     return false
   }
 
-  tryTake() {
+  takeSync() {
     if (Date.now() < this._timeoutDate) {
-      return FAILED
+      return false
     }
     throw this._makeError()
   }
@@ -139,6 +148,10 @@ export class DelayChan extends BaseDelayChan
     this._closed = false
   }
 
+  get value() {
+    return this._closed ? this._value : undefined
+  }
+
   get canPut() {
     return false
   }
@@ -159,12 +172,12 @@ export class DelayChan extends BaseDelayChan
     return this._closed
   }
 
-  tryTake() {
+  takeSync() {
     if (!this.canTakeSync) {
-      return FAILED
+      return false
     }
     this._close()
-    return this._value
+    return true
   }
 
   _take(fnVal, fnErr, needsCancelFn) {
@@ -174,13 +187,17 @@ export class DelayChan extends BaseDelayChan
     return this._addConsumer(fnVal, needsCancelFn)
   }
 
-  tryClose() {
-    this._close()
+  closeSync() {
+    if (!this._closed) {
+      this._close()
+    }
     return true
   }
 
   close() {
-    this._close()
+    if (!this._closed) {
+      this._close()
+    }
     return P_RESOLVED
   }
 

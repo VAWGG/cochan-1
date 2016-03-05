@@ -2,27 +2,13 @@ import {CLOSED, FAILED} from './constants'
 import {TimeoutChan} from './special-chans'
 
 
-function trySelectNoThrow(/* chans */) {
-  try {
-    let value = trySelect.apply(null, arguments)
-    return { value, thrown: false }
-  } catch (err) {
-    return { value: err, thrown: true }
-  }
-}
-
-
-export function trySelect(chans) {
-  if (arguments.length > 1) {
-    chans = arguments
-  }
-
+export function selectSync(/* ...chans */) {
   let hasAliveDataChans = false
   let chansWithData = []
   let timeoutChan = undefined
   
-  for (let i = 0; i < chans.length; ++i) {
-    let chan = chans[i]
+  for (let i = 0; i < arguments.length; ++i) {
+    let chan = arguments[i]
     if (chan.canTakeSync) {
       if (chan instanceof TimeoutChan) {
         timeoutChan = chan
@@ -36,32 +22,44 @@ export function trySelect(chans) {
 
   if (!chansWithData.length) {
     if (!hasAliveDataChans) {
-      return { chan: CLOSED, value: CLOSED }
+      return CLOSED
     }
     if (timeoutChan) {
-      return timeoutChan.tryTake() // will throw
+      timeoutChan.takeSync() // will throw
+      throw new Error('timeout chan should have thrown but did not o_O')
     }
-    return { chan: FAILED, value: FAILED }
+    return FAILED
   }
 
   let totalChans = chansWithData.length
   let chan = chansWithData[ totalChans == 1 ? 0 : Math.floor(Math.random() * totalChans) ]
 
-  return { chan, value: chan.tryTake() }
+  if (!chan.takeSync()) {
+    throw new Error('chan should have allowed to take synchronously, but did not o_O')
+  }
+
+  return chan
 }
 
 
-export function select(chans) {
-  let syncResult = trySelectNoThrow.apply(null, arguments)
+function selectSyncNoThrow(/* ...chans */) {
+  try {
+    let value = selectSync.apply(null, arguments)
+    return { value, thrown: false }
+  } catch (value) {
+    return { value, thrown: true }
+  }
+}
+
+
+export function select(/* ...chans */) {
+  let syncResult = selectSyncNoThrow.apply(null, arguments)
   if (syncResult.thrown) {
     return Promise.reject(syncResult.value)
   }
-  if (syncResult.value.value !== FAILED) {
-    return Promise.resolve(syncResult.value)
-  }
 
-  if (arguments.length > 1) {
-    chans = arguments
+  if (syncResult.value !== FAILED) {
+    return Promise.resolve(syncResult.value)
   }
 
   let fnVal, fnErr
@@ -69,8 +67,8 @@ export function select(chans) {
   let cancelFns = []
   let numClosed = 0
 
-  for (let i = 0; i < chans.length; ++i) {
-    let chan = chans[i]
+  for (let i = 0; i < arguments.length; ++i) {
+    let chan = arguments[i]
     if (!chan.isClosed) {
       cancelFns.push(chan._take(v => onValue(v, chan), onError, true))
     }
@@ -80,13 +78,16 @@ export function select(chans) {
     if (value === CLOSED) {
       if (++numClosed < cancelFns.length) {
         return
+      } else {
+        chan = CLOSED
       }
-      chan = CLOSED
     }
     unsub()
-    fnVal({ chan, value })
+    fnVal(chan)
   }
 
+  // TODO: should we really propagate the first encountered error
+  // to the caller, even if there are other non-closed channels?
   function onError(err) {
     unsub()
     fnErr(err)

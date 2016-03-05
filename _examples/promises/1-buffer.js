@@ -1,4 +1,4 @@
-var chan = require('../..')
+var chan = require('../../es6')
 
 // allow buffering up to 3 items without blocking
 var ch = new chan(3)
@@ -13,7 +13,7 @@ function producer(items) {
     ch.put(items[i]).then(donePuttingItem)
   }
   function donePuttingItem() {
-    ++i; chan.delay(0).then(putNextItem)
+    ++i; chan.delay(0).take().then(putNextItem)
   }
   function close() {
     console.log(`[P] closing channel...`)
@@ -44,4 +44,4 @@ function consumer() {
 
 
 producer([ 1, 2, 3, 4, 5 ])
-chan.delay(100).then(consumer)
+chan.delay(500).take().then(consumer)

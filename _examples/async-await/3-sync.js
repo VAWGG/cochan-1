@@ -6,7 +6,7 @@ async function batchProducer(items, ch) {
   while (await ch.maybeCanPutSync()) {
     while (ch.canPutSync && items.length) {
       p(' -> putting item:', items[0])
-      ch.tryPut(items.shift())
+      ch.putSync(items.shift())
     }
     if (!items.length) {
       p(' -> done putting all items, closing channel...')
@@ -22,9 +22,15 @@ async function batchConsumer(ch) {
   p('<-  waiting until can take...')
   while (await ch.maybeCanTakeSync()) {
     while (ch.canTakeSync) {
-      let item = ch.tryTake()
-      p('<-  took item:', item)
+      ch.takeSync()
+      p('<-  took item:', ch.value)
     }
+    // FIXME: ACHTUNG: this causes infinite loop
+    //
+    // while (ch.takeSync()) {
+    //   p('<-  took item:', ch.value)
+    // }
+    //
     p('<-  waiting until can take...')
   }
   p('<-  channel closed')

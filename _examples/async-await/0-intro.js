@@ -1,4 +1,4 @@
-import chan from '../..'
+import chan from '../../es6'
 
 let ch = new chan()
 
@@ -15,7 +15,7 @@ function producerThatDoesntRespectBackpressure() {
 
 async function consumer() {
   while (true) {
-    let item = await ch
+    let item = await ch.take()
     if (item == ch.CLOSED) break
     console.log(item)
   }

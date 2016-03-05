@@ -5,8 +5,8 @@ communication between concurrent activities, e.g. coroutines. Plays especially
 well with generators or ES7 async/await, but doesn't depend on these language
 features. Depends on `Promise` being available.
 
-Supports buffering, selection from multiple channels, non-blocking operations
-(`tryPut`, `tryTake` and `trySelect`), errors and channel closing.
+Supports buffering, selection from multiple channels, non-blocking operations,
+errors and channel closing.
 
 [golang channels]: https://tour.golang.org/concurrency/2
 
@@ -43,7 +43,7 @@ function producerThatDoesntRespectBackpressure() {
 
 async function consumer() {
   while (true) {
-    let item = await ch
+    let item = await ch.take()
     if (item == ch.CLOSED) break
     console.log(`item: ${ item }`)
   }
@@ -62,14 +62,14 @@ Selection from multiple channels:
 import chan from 'cochan'
 
 async function someFunc(ch1, ch2) {
-  // this line will throw on timeout
-  let sel = await chan.select(ch1, ch2, chan.timeout(5000))
-  switch (sel.chan) {
+  let chTimeout = chan.timeout(5000, 'no value in 5 sec')
+  // the await statement will throw on timeout
+  switch (await chan.select(ch1, ch2, chTimeout)) {
     case ch1:
-      await doSmthWithValueFromCh1(sel.value)
+      await doSmthWithValueFromCh1(ch1.value)
       break
     case ch2:
-      await doSmthWithValueFromCh2(sel.value)
+      await doSmthWithValueFromCh2(ch2.value)
       break
     case chan.CLOSED:
       await handleBothCh1AndCh2Closed()
@@ -78,7 +78,7 @@ async function someFunc(ch1, ch2) {
 }
 ```
 
-When several channels have some value, the channel to take value from
+When several channels have some value, the channel to take the value from
 is selected randomly.
 
 
@@ -102,7 +102,7 @@ async function producer(items) {
 
 async function consumer() {
   while (true) {
-    let item = await ch
+    let item = await ch.take()
     if (item == ch.CLOSED) break
     console.log(`[c] got item: ${ item }`)
   }
@@ -111,7 +111,7 @@ async function consumer() {
 
 (async function() {
   producer([ 1, 2, 3, 4, 5 ])
-  await chan.delay(10)
+  await chan.delay(500).take()
   consumer()
 })()
 ```

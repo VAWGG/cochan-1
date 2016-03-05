@@ -2,7 +2,7 @@ import BaseChan from './base-chan'
 import {CLOSED, FAILED, nop} from './constants'
 import {P_RESOLVED, P_RESOLVED_WITH_FALSE, P_RESOLVED_WITH_TRUE} from './constants'
 import {TimeoutChan, DelayChan} from './special-chans'
-import {trySelect, select} from './select'
+import {selectSync, select} from './select'
 import applyStream from './apply-stream'
 
 
@@ -44,6 +44,11 @@ class Chan extends BaseChan
     this._bufferSize = bufferSize
     this._buffer = []
     this._totalWaiters = 0
+    this._value = undefined
+  }
+
+  get value() {
+    return this._value
   }
 
   get canPut() {
@@ -69,8 +74,8 @@ class Chan extends BaseChan
     return this._state == STATE_CLOSED
   }
 
-  tryPutError(err) {
-    return this.tryPut(err, true)
+  putErrorSync(err) {
+    return this.putSync(err, true)
   }
 
   putError(err, close) {
@@ -81,7 +86,7 @@ class Chan extends BaseChan
     }
   }
 
-  tryPut(val, isError) {
+  putSync(val, isError) {
     if (this._state >= STATE_CLOSING) {
       throw new Error('attempt to put into a closed channel')
     }
@@ -141,13 +146,13 @@ class Chan extends BaseChan
     })
   }
 
-  tryTake() {
+  takeSync() {
     if (this._state == STATE_CLOSED) {
-      return CLOSED
+      return false
     }
 
     if (this._state == STATE_WAITING_FOR_PUBLISHER || this._buffer.length == 0) {
-      return FAILED
+      return false
     }
     // now state is either STATE_NORMAL or STATE_CLOSING
 
@@ -164,7 +169,7 @@ class Chan extends BaseChan
           }
         })
       }
-      return FAILED
+      return false
     }
 
     let {item} = result
@@ -178,7 +183,7 @@ class Chan extends BaseChan
       throw item.val
     }
 
-    return item.val
+    return true
   }
 
   _take(fnVal, fnErr, needsCancelFn) {
@@ -270,7 +275,7 @@ class Chan extends BaseChan
     })
   }
 
-  tryClose() {
+  closeSync() {
     if (this._state == STATE_CLOSED) {
       return true
     }
@@ -288,7 +293,7 @@ class Chan extends BaseChan
   }
 
   close() {
-    if (this.tryClose()) {
+    if (this.closeSync()) {
       return P_RESOLVED
     }
 
@@ -311,11 +316,10 @@ class Chan extends BaseChan
   }
 
   closeNow() {
-    if (this.tryClose()) {
-      return
+    if (!this.closeSync()) {
+      this._state = STATE_CLOSED
+      this._terminateAllWaitingPublishers()
     }
-    this._state = STATE_CLOSED
-    this._terminateAllWaitingPublishers()
   }
 
   _takeFromWaitingPublisher() {
@@ -337,6 +341,10 @@ class Chan extends BaseChan
       // that there is a waiting consumer after the latter is pushed on the list
       this._state = STATE_WAITING_FOR_PUBLISHER
       return { item: FAILED, waiters: waiters }
+    }
+
+    if (item.type == TYPE_VALUE) {
+      this._value = item.val
     }
 
     if (this._state == STATE_CLOSING && this._buffer.length == 1) {
@@ -389,8 +397,12 @@ class Chan extends BaseChan
       this._state = STATE_NORMAL
     }
 
-    let fn = isError ? item.fnErr : item.fnVal
-    fn && fn(val)
+    if (isError) {
+      item.fnErr && item.fnErr(val)
+    } else {
+      this._value = val
+      item.fnVal && item.fnVal(val)
+    }
 
     return SUCCESS
   }
@@ -445,7 +457,7 @@ function callFns(fns) {
 Chan.CLOSED = CLOSED
 Chan.FAILED = FAILED
 
-Chan.trySelect = trySelect
+Chan.selectSync = selectSync
 Chan.select = select
 
 
