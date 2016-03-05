@@ -57,7 +57,10 @@ class Chan extends BaseChan
 
   get canPutSync() {
     let numNonWaiters = this._buffer.length - this._totalWaiters
-    return this._state == STATE_WAITING_FOR_PUBLISHER && numNonWaiters > 0
+    // If waiting for publisher, there must be either at least one "real" consumer in the buffer, or
+    // the channel must tolerate buffering (putting without blocking) at least one value.
+    // If waiting for consumer, the channel must tolerate buffering at least one more value.
+    return this._state == STATE_WAITING_FOR_PUBLISHER && (numNonWaiters > 0 || this._bufferSize > 0)
         || this._state == STATE_NORMAL && numNonWaiters < this._bufferSize
   }
 
@@ -236,7 +239,6 @@ class Chan extends BaseChan
       this._buffer.length = 0
       this._totalWaiters = 0
       this._triggerWaiters(waiters, undefined, false)
-      return new Promise(res => setImmediate(() => res(this._state != STATE_CLOSED)))
     }
     if (this._state == STATE_CLOSING) {
       // closing but no data left in the buffer
@@ -263,7 +265,6 @@ class Chan extends BaseChan
       this._buffer.length = 0
       this._totalWaiters = 0
       this._triggerWaiters(waiters, undefined, false)
-      return new Promise(res => setImmediate(() => res(this._state < STATE_CLOSING)))
     }
     return new Promise(resolve => {
       this._buffer.push({

@@ -21,16 +21,9 @@ async function batchProducer(items, ch) {
 async function batchConsumer(ch) {
   p('<-  waiting until can take...')
   while (await ch.maybeCanTakeSync()) {
-    while (ch.canTakeSync) {
-      ch.takeSync()
+    while (ch.takeSync()) {
       p('<-  took item:', ch.value)
     }
-    // FIXME: ACHTUNG: this causes infinite loop
-    //
-    // while (ch.takeSync()) {
-    //   p('<-  took item:', ch.value)
-    // }
-    //
     p('<-  waiting until can take...')
   }
   p('<-  channel closed')
