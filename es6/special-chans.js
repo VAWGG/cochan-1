@@ -48,6 +48,12 @@ class BaseDelayChan extends BaseChan
     return this.isClosed ? P_RESOLVED_WITH_FALSE : P_RESOLVED_WITH_TRUE
   }
 
+  toString() {
+    return this.name === undefined
+      ? `${ this.constructor.name }(${ this._ms })`
+      : `${ this.constructor.name }<${ this.name }>(${ this._ms })`
+  }
+
   _addConsumer(fn, needsCancelFn, now) {
     if (this._tid == undefined) {
       let delay = Math.max(0, this._timeoutDate - (now || Date.now()))

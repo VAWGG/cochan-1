@@ -444,6 +444,12 @@ class Chan extends BaseChan
       item.fnErr && item.fnErr(err)
     }
   }
+
+  toString() {
+    return this.name === undefined
+      ? `Chan(${ this._bufferSize })`
+      : `Chan<${ this.name }>(${ this._bufferSize })`
+  }
 }
 
 

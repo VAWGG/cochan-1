@@ -8,6 +8,16 @@ export default class BaseChan
   take() {
     return this._thenable
   }
+
+  toString() {
+    return this.name === undefined
+      ? `${ this.constructor.name }()`
+      : `${ this.constructor.name }<${ this.name }>()`
+  }
+
+  inspect() {
+    return this.toString()
+  }
 }
 
 
