@@ -1,30 +1,33 @@
 import chan from '../../es6'
+import {p, sleep} from '../utils'
 
-// allow buffering up to 3 items without blocking
-let ch = new chan(3)
-
-async function producer(items) {
+async function producer(ch, items) {
   for (let item of items) {
-    console.log(`[P] putting item: ${ item }...`)
-    await ch.put(item)
-    await chan.delay(0).take()
+    p(` -> sending item: ${ item }...`)
+    await ch.send(item)
+    await sleep(0)
   }
-  console.log(`[P] closing channel...`)
+  p(` -> closing channel...`)
   await ch.close()
-  console.log(`[P] channel closed`)
+  p(` -> done closing channel`)
 }
 
-async function consumer() {
+async function consumer(ch) {
   while (true) {
     let item = await ch.take()
     if (item == ch.CLOSED) break
-    console.log(`[c] got item: ${ item }`)
+    p(`<-  got item: ${ item }`)
   }
-  console.log(`[c] finished`)
+  p(`<-  channel closed`)
 }
 
-(async function() {
-  producer([ 1, 2, 3, 4, 5 ])
-  await chan.delay(500).take()
-  consumer()
-})()
+async function run() {
+  // allow buffering up to 3 items without blocking
+  let ch = new chan(3)
+  let items = [ 1, 2, 3, 4, 5 ]
+  producer(ch, items).catch(p)
+  await sleep(500)
+  consumer(ch).catch(p)
+}
+
+run().catch(p)

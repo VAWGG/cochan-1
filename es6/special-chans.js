@@ -16,12 +16,12 @@ class BaseDelayChan {
     this._timeoutBound = () => this._timeout()
   }
 
-  putSync(val) {
-    throw new Error(`putSync() is unsupported by ${ this.constructor.name }`)
+  sendSync(val) {
+    throw new Error(`sendSync() is unsupported by ${ this.constructor.name }`)
   }
 
-  put(val) {
-    throw new Error(`put() is unsupported by ${ this.constructor.name }`)
+  send(val) {
+    throw new Error(`send() is unsupported by ${ this.constructor.name }`)
   }
 
   closeSync() {
@@ -46,7 +46,7 @@ class BaseDelayChan {
     })
   }
 
-  maybeCanPutSync() {
+  maybeCanSendSync() {
     return this.isClosed ? P_RESOLVED_WITH_FALSE : P_RESOLVED_WITH_TRUE
   }
 
@@ -91,11 +91,11 @@ export class TimeoutChan extends BaseDelayChan
     return undefined
   }
 
-  get canPut() {
+  get canSend() {
     return false
   }
 
-  get canPutSync() {
+  get canSendSync() {
     return false
   }
 
@@ -166,11 +166,11 @@ export class DelayChan extends BaseDelayChan
     return this._closed ? this._value : undefined
   }
 
-  get canPut() {
+  get canSend() {
     return false
   }
 
-  get canPutSync() {
+  get canSendSync() {
     return false
   }
 

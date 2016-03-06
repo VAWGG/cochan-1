@@ -1,6 +1,6 @@
 import chan from '../../es6'
 import Stream from 'readable-stream'
-import {p} from '../utils'
+import {p, sleep} from '../utils'
 
 class ProducerStream extends Stream.Readable {
 
@@ -12,7 +12,7 @@ class ProducerStream extends Stream.Readable {
   _read(size) {
     while (this._items.length) {
       let item = this._items.shift()
-      p(' -> producing item:', item)
+      p(' -> producing stream item:', item)
       if (!this.push(item)) {
         return
       }
@@ -34,9 +34,10 @@ async function consumer(ch) {
 
 async function run() {
   let ch = new chan(3)
-  let stream = new ProducerStream('bobrohata'.split(''))
+  let items = 'bobrohata'.split('')
+  let stream = new ProducerStream(items)
   stream.pipe(ch)
-  await chan.delay(500).take()
+  await sleep(500)
   consumer(ch).catch(p)
 }
 

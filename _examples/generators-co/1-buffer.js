@@ -1,31 +1,34 @@
 import co from 'co'
 import chan from '../../es6'
+import {p, sleep} from '../utils'
 
-// allow buffering up to 3 items without blocking
-let ch = new chan(3)
-
-function* $producer(items) {
+function* $producer(ch, items) {
   for (let item of items) {
-    console.log(`[P] putting item: ${ item }...`)
-    yield ch.put(item)
-    yield chan.delay(0).take()
+    p(` -> sending item: ${ item }...`)
+    yield ch.send(item)
+    yield sleep(0)
   }
-  console.log(`[P] closing channel...`)
+  p(` -> closing channel...`)
   yield ch.close()
-  console.log(`[P] channel closed`)
+  p(` -> done closing channel`)
 }
 
-function* $consumer() {
+function* $consumer(ch) {
   while (true) {
     let item = yield ch.take()
     if (item == ch.CLOSED) break
-    console.log(`[c] got item: ${ item }`)
+    p(`<-  got item: ${ item }`)
   }
-  console.log(`[c] finished`)
+  p(`<-  channel closed`)
 }
 
-co(function*() {
-  co($producer([ 1, 2, 3, 4, 5 ]))
-  yield chan.delay(500).take()
-  co($consumer())
-})
+function* $run() {
+  // allow buffering up to 3 items without blocking
+  let ch = new chan(3)
+  let items = [ 1, 2, 3, 4, 5 ]
+  co($producer(ch, items)).catch(p)
+  yield sleep(500)
+  co($consumer(ch)).catch(p)
+}
+
+co($run()).catch(p)

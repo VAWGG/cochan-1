@@ -8,3 +8,7 @@ exports.p = function p() {
     console.log.apply(console, arguments)
   }
 }
+
+exports.sleep = function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}

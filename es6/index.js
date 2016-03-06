@@ -45,14 +45,14 @@ class Chan {
     return this._value
   }
 
-  get canPut() {
+  get canSend() {
     return this._state < STATE_CLOSING
   }
 
-  get canPutSync() {
+  get canSendSync() {
     let numNonWaiters = this._buffer.length - this._totalWaiters
     // If waiting for publisher, there must be either at least one "real" consumer in the buffer, or
-    // the channel must tolerate buffering (putting without blocking) at least one value.
+    // the channel must tolerate buffering (sending without blocking) at least one value.
     // If waiting for consumer, the channel must tolerate buffering at least one more value.
     return this._state == STATE_WAITING_FOR_PUBLISHER && (numNonWaiters > 0 || this._bufferSize > 0)
         || this._state == STATE_NORMAL && numNonWaiters < this._bufferSize
@@ -71,21 +71,21 @@ class Chan {
     return this._state == STATE_CLOSED
   }
 
-  putErrorSync(err) {
-    return this.putSync(err, true)
+  sendErrorSync(err) {
+    return this.sendSync(err, true)
   }
 
-  putError(err, close) {
+  sendError(err, close) {
     if (close) {
-      return this.put(err, true).then(() => this.close())
+      return this.send(err, true).then(() => this.close())
     } else {
-      return this.put(err, true)
+      return this.send(err, true)
     }
   }
 
-  putSync(val, isError) {
+  sendSync(val, isError) {
     if (this._state >= STATE_CLOSING) {
-      throw new Error('attempt to put into a closed channel')
+      throw new Error('attempt to send into a closed channel')
     }
 
     let waiters
@@ -116,13 +116,13 @@ class Chan {
     return false
   }
 
-  put(val, isError) {
-    return this._put(val, isError, this._resolve, this._reject) || this._nextPromise()
+  send(val, isError) {
+    return this._send(val, isError, this._resolve, this._reject) || this._nextPromise()
   }
 
-  _put(val, isError, fnOk, fnErr) {
+  _send(val, isError, fnOk, fnErr) {
     if (this._state >= STATE_CLOSING) {
-      return Promise.reject(new Error('attempt to put into a closed channel'))
+      return Promise.reject(new Error('attempt to send into a closed channel'))
     }
 
     let waiters
@@ -256,11 +256,11 @@ class Chan {
     })
   }
 
-  maybeCanPutSync() {
+  maybeCanSendSync() {
     if (this._state >= STATE_CLOSING) {
       return P_RESOLVED_WITH_FALSE
     }
-    if (this.canPutSync) {
+    if (this.canSendSync) {
       return P_RESOLVED_WITH_TRUE
     }
     if (this._state == STATE_WAITING_FOR_PUBLISHER && this._buffer.length) {

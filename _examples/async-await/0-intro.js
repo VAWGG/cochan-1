@@ -3,14 +3,14 @@ import chan from '../../es6'
 let ch = new chan()
 
 async function producerThatRespectsBackpressure() {
-  await ch.put('a')
-  await ch.put('b')
-  await ch.put('c')
+  await ch.send('a')
+  await ch.send('b')
+  await ch.send('c')
 }
 
 function producerThatDoesntRespectBackpressure() {
-  ch.put(1)
-  ch.put(2)
+  ch.send(1)
+  ch.send(2)
 }
 
 async function consumer() {

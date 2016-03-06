@@ -1,31 +1,31 @@
-var chan = require('../../es6')
+var chan = require('../..')
+var utils = require('../utils')
+var p = utils.p
+var sleep = utils.sleep
 
-// allow buffering up to 3 items without blocking
-var ch = new chan(3)
-
-function producer(items) {
+function producer(ch, items) {
   var i = 0
-  function putNextItem() {
+  function sendNextItem() {
     if (i >= items.length) {
       return close()
     }
-    console.log(`[P] putting item: ${ items[i] }...`)
-    ch.put(items[i]).then(donePuttingItem)
+    p(' -> sending item: ' + items[i] + '...')
+    ch.send(items[i]).then(doneSendingItem)
   }
-  function donePuttingItem() {
-    ++i; chan.delay(0).take().then(putNextItem)
+  function doneSendingItem() {
+    ++i; sleep(0).then(sendNextItem)
   }
   function close() {
-    console.log(`[P] closing channel...`)
+    p(' -> closing channel...')
     ch.close().then(closed)
   }
   function closed() {
-    console.log(`[P] channel closed`)
+    p(' -> done closing channel')
   }
-  putNextItem()
+  sendNextItem()
 }
 
-function consumer() {
+function consumer(ch) {
   function takeNextItem() {
     ch.take().then(gotItem)
   }
@@ -33,15 +33,24 @@ function consumer() {
     if (item == ch.CLOSED) {
       return channelClosed()
     }
-    console.log(`[c] got item: ${ item }`)
+    p('<-  got item:', item)
     takeNextItem()
   }
   function channelClosed() {
-    console.log(`[c] finished`)
+    p('<-  channel closed')
   }
   takeNextItem()
 }
 
+// allow buffering up to 3 items without blocking
+var ch = new chan(3)
 
-producer([ 1, 2, 3, 4, 5 ])
-chan.delay(500).take().then(consumer)
+Promise.resolve().then(function() {
+  var items = [ 1, 2, 3, 4, 5 ]
+  producer(ch, items)
+  return sleep(500)
+})
+.then(function() {
+  consumer(ch)
+})
+.catch(p)

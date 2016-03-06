@@ -31,14 +31,14 @@ import chan from 'cochan'
 let ch = new chan()
 
 async function producerThatRespectsBackpressure() {
-  await ch.put('a')
-  await ch.put('b')
-  await ch.put('c')
+  await ch.send('a')
+  await ch.send('b')
+  await ch.send('c')
 }
 
 function producerThatDoesntRespectBackpressure() {
-  ch.put('1')
-  ch.put('2')
+  ch.send('1')
+  ch.send('2')
 }
 
 async function consumer() {
@@ -92,8 +92,8 @@ let ch = new chan(3)
 
 async function producer(items) {
   for (let item of items) {
-    console.log(`[P] putting item: ${ item }...`)
-    await ch.put(item)
+    console.log(`[P] sending item: ${ item }...`)
+    await ch.send(item)
   }
   console.log(`[P] closing channel...`)
   await ch.close()
@@ -119,15 +119,15 @@ async function consumer() {
 This example yields the following output:
 
 ```text
-[P] putting item: 1...
-[P] putting item: 2...
-[P] putting item: 3...
-[P] putting item: 4...
+[P] sending item: 1...
+[P] sending item: 2...
+[P] sending item: 3...
+[P] sending item: 4...
 [c] got item: 1
 [c] got item: 2
 [c] got item: 3
 [c] got item: 4
-[P] putting item: 5...
+[P] sending item: 5...
 [c] got item: 5
 [P] closing channel...
 [c] finished
