@@ -1,12 +1,14 @@
-import BaseChan from './base-chan'
+import {EventEmitterMixin} from './event-emitter'
+import {Chan$BaseMixin} from './chan-mixin'
+import {mixin, nop} from './utils'
+import {CLOSED, FAILED} from './constants'
 import {P_RESOLVED_WITH_FALSE, P_RESOLVED_WITH_TRUE} from './constants'
-import {CLOSED, FAILED, nop} from './constants'
 
 
-class BaseDelayChan extends BaseChan
-{
+class BaseDelayChan {
+
   constructor(ms) {
-    super()
+    this._initChanBase()
     this._ms = ms
     this._timeoutDate = Date.now() + ms
     this._tid = undefined
@@ -48,12 +50,6 @@ class BaseDelayChan extends BaseChan
     return this.isClosed ? P_RESOLVED_WITH_FALSE : P_RESOLVED_WITH_TRUE
   }
 
-  toString() {
-    return this.name === undefined
-      ? `${ this.constructor.name }(${ this._ms })`
-      : `${ this.constructor.name }<${ this.name }>(${ this._ms })`
-  }
-
   _addConsumer(fn, needsCancelFn, now) {
     if (this._tid == undefined) {
       let delay = Math.max(0, this._timeoutDate - (now || Date.now()))
@@ -78,6 +74,10 @@ class BaseDelayChan extends BaseChan
     }
   }
 }
+
+
+mixin(BaseDelayChan, EventEmitterMixin)
+mixin(BaseDelayChan, Chan$BaseMixin)
 
 
 export class TimeoutChan extends BaseDelayChan
@@ -142,6 +142,14 @@ export class TimeoutChan extends BaseDelayChan
 
   _makeError() {
     return new Error(this._message || `timeout of ${ this._ms } ms exceeded`)
+  }
+
+  get _constructorName() {
+    return 'chan.timeout'
+  }
+
+  get _constructorArgsDesc() {
+    return this._message ? [ this._ms, this._message ] : [ this._ms ]
   }
 }
 
@@ -235,5 +243,13 @@ export class DelayChan extends BaseDelayChan
       let fn = this._consumers.shift().fn
       fn && fn(CLOSED)
     }
+  }
+
+  get _constructorName() {
+    return 'chan.delay'
+  }
+
+  get _constructorArgsDesc() {
+    return this._value ? [ this._ms, this._value ] : [ this._ms ]
   }
 }

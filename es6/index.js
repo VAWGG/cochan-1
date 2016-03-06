@@ -1,9 +1,10 @@
-import BaseChan from './base-chan'
-import {CLOSED, FAILED, nop} from './constants'
-import {P_RESOLVED, P_RESOLVED_WITH_FALSE, P_RESOLVED_WITH_TRUE} from './constants'
 import {TimeoutChan, DelayChan} from './special-chans'
-import {selectSync, select} from './select'
-import applyStream from './apply-stream'
+import {EventEmitterMixin} from './event-emitter'
+import {Chan$BaseMixin} from './chan-mixin'
+import {Chan$SelectMixin} from './select'
+import {mixin, nop} from './utils'
+import {CLOSED, FAILED} from './constants'
+import {P_RESOLVED, P_RESOLVED_WITH_FALSE, P_RESOLVED_WITH_TRUE} from './constants'
 
 
 const STATE_NORMAL = 0
@@ -18,11 +19,7 @@ const TYPE_WAITER = 2
 const SUCCESS = []
 
 
-class Chan extends BaseChan
-{
-  static isChan(obj) {
-    return obj instanceof BaseChan
-  }
+class Chan {
 
   static timeout(ms, message) {
     return new TimeoutChan(ms, message)
@@ -32,14 +29,8 @@ class Chan extends BaseChan
     return new DelayChan(ms, value)
   }
 
-  static fromStream(emitter, bufferSize = 0) {
-    let chan = new Chan(bufferSize)
-    applyStream(emitter, chan, true, true)
-    return chan
-  }
-
   constructor(bufferSize = 0) {
-    super()
+    this._initChanBase()
     this._state = STATE_NORMAL
     this._bufferSize = bufferSize
     this._buffer = []
@@ -446,10 +437,12 @@ class Chan extends BaseChan
     }
   }
 
-  toString() {
-    return this.name === undefined
-      ? `Chan(${ this._bufferSize })`
-      : `Chan<${ this.name }>(${ this._bufferSize })`
+  get _constructorName() {
+    return 'chan'
+  }
+
+  get _constructorArgsDesc() {
+    return [ this._bufferSize ]
   }
 }
 
@@ -461,25 +454,9 @@ function callFns(fns) {
 }
 
 
-Chan.CLOSED = CLOSED
-Chan.FAILED = FAILED
-
-Chan.selectSync = selectSync
-Chan.select = select
-
-
-BaseChan.prototype.CLOSED = CLOSED
-BaseChan.prototype.FAILED = FAILED
-
-BaseChan.prototype.delay = Chan.delay
-BaseChan.prototype.timeout = Chan.timeout
-
-
-Chan.prototype.CLOSED = CLOSED
-Chan.prototype.FAILED = FAILED
-
-Chan.prototype.delay = Chan.delay
-Chan.prototype.timeout = Chan.timeout
+mixin(Chan, Chan$BaseMixin)
+mixin(Chan, Chan$SelectMixin)
+mixin(Chan, EventEmitterMixin)
 
 
 module.exports = Chan

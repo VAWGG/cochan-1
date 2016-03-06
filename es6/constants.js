@@ -11,4 +11,4 @@ export class Marker {
 export const CLOSED = new Marker('closed')
 export const FAILED = new Marker('failed')
 
-export function nop() {}
+export const ISCHAN = new Marker('ischan')

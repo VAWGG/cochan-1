@@ -1,28 +1,5 @@
+export default class Chan$Thenable {
 
-export default class BaseChan
-{
-  constructor() {
-    this._thenable = new BaseChanThenable(this)
-  }
-
-  take() {
-    return this._thenable
-  }
-
-  toString() {
-    return this.name === undefined
-      ? `${ this.constructor.name }()`
-      : `${ this.constructor.name }<${ this.name }>()`
-  }
-
-  inspect() {
-    return this.toString()
-  }
-}
-
-
-class BaseChanThenable
-{
   constructor(chan) {
     this._chan = chan
   }
@@ -64,4 +41,5 @@ class BaseChanThenable
   catch(fnErr) {
     return this.then(undefined, fnErr)
   }
+
 }
