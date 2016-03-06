@@ -13,6 +13,15 @@ const EventEmitterMixin = {
       }
       return true
     }
+    if (event == 'error') {
+      let err = arguments[1]
+      if (err == undefined) {
+        err = new Error('uncaught, unspecified error event')
+      } else if (!(err instanceof Error)) {
+        err = new Error('uncaught error event: ' + err)
+      }
+      throw err
+    }
     return false
   }
   
