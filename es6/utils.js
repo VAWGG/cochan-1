@@ -1,3 +1,12 @@
+export let nextTick;
+
+if ('undefined' != typeof process && process.nextTick) {
+  nextTick = fn => process.nextTick(fn)
+} else if ('undefined' != typeof setImmediate) {
+  nextTick = setImmediate
+} else {
+  nextTick = fn => setTimeout(fn, 0)
+}
 
 export function mixin(Cls, protoMixin, staticMixin) {
   if (arguments.length == 2) {

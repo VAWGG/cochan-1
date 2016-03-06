@@ -2,6 +2,7 @@ import {TimeoutChan, DelayChan} from './special-chans'
 import {EventEmitterMixin} from './event-emitter'
 import {Chan$BaseMixin} from './chan-mixin'
 import {Chan$SelectMixin} from './select'
+import {Chan$WritableStreamMixin} from './writable-stream'
 import {mixin, nop} from './utils'
 import {CLOSED, FAILED} from './constants'
 import {P_RESOLVED, P_RESOLVED_WITH_FALSE, P_RESOLVED_WITH_TRUE} from './constants'
@@ -31,11 +32,13 @@ class Chan {
 
   constructor(bufferSize = 0) {
     this._initChanBase()
+    this._initWritableStream()
     this._state = STATE_NORMAL
     this._bufferSize = bufferSize
     this._buffer = []
     this._totalWaiters = 0
     this._value = undefined
+    this._nextPromise()
   }
 
   get value() {
@@ -97,6 +100,7 @@ class Chan {
     if (this._buffer.length - this._totalWaiters < this._bufferSize) {
       this._buffer.push({ val, type: isError ? TYPE_ERROR : TYPE_VALUE,
         fnVal: undefined, fnErr: undefined })
+      // notify all waiters for opportunity to consume
       waiters && this._triggerWaiters(waiters, val, isError)
       return true
     }
@@ -113,6 +117,10 @@ class Chan {
   }
 
   put(val, isError) {
+    return this._put(val, isError, this._resolve, this._reject) || this._nextPromise()
+  }
+
+  _put(val, isError, fnOk, fnErr) {
     if (this._state >= STATE_CLOSING) {
       return Promise.reject(new Error('attempt to put into a closed channel'))
     }
@@ -133,11 +141,10 @@ class Chan {
       return P_RESOLVED
     }
 
-    return new Promise((res, rej) => {
-      this._buffer.push({ val, type: isError ? TYPE_ERROR : TYPE_VALUE,
-        fnVal: res, fnErr: rej })
-      waiters && this._triggerWaiters(waiters, val, isError)
-    })
+    this._buffer.push({ val, type: isError ? TYPE_ERROR : TYPE_VALUE, fnVal: fnOk, fnErr })
+    waiters && this._triggerWaiters(waiters, val, isError)
+
+    return undefined
   }
 
   takeSync() {
@@ -157,6 +164,7 @@ class Chan {
         setImmediate(() => {
           if (this._state < STATE_CLOSING) {
             this._triggerWaiters(result.waiters, undefined, false)
+            this._needsDrain && this._emitDrain()
           } else {
             let err = new Error('channel closed')
             this._triggerWaiters(result.waiters, err, true)
@@ -170,7 +178,10 @@ class Chan {
     item.fnVal && item.fnVal()
     
     if (result.waiters) {
-      setImmediate(() => this._triggerWaiters(result.waiters, undefined, false))
+      setImmediate(() => {
+        this._triggerWaiters(result.waiters, undefined, false)
+        this._needsDrain && this._emitDrain()
+      })
     }
 
     if (item.type == TYPE_ERROR) {
@@ -196,6 +207,7 @@ class Chan {
         let fn = item.type == TYPE_VALUE ? fnVal : fnErr
         fn && fn(item.val)
         item.waiters && this._triggerWaiters(item.waiters)
+        this._needsDrain && this._emitDrain()
         return nop
       }
       waiters = result.waiters
@@ -207,6 +219,7 @@ class Chan {
 
     // notify all waiters for the opportunity to publish
     waiters && this._triggerWaiters(waiters, undefined, false)
+    this._needsDrain && this._emitDrain()
 
     return needsCancelFn
       ? () => {
@@ -230,8 +243,7 @@ class Chan {
       this._buffer.length = 0
       this._totalWaiters = 0
       this._triggerWaiters(waiters, undefined, false)
-    }
-    if (this._state == STATE_CLOSING) {
+    } else if (this._state == STATE_CLOSING) {
       // closing but no data left in the buffer
       return P_RESOLVED_WITH_FALSE
     }
@@ -240,6 +252,7 @@ class Chan {
       let onData = (data) => data === CLOSED ? resolve(false) : resolve(true)
       this._buffer.push({ fnVal: onData, fnErr: onData, consumes: false })
       ++this._totalWaiters
+      this._needsDrain && this._emitDrain()
     })
   }
 
@@ -274,11 +287,17 @@ class Chan {
     if (this._state == STATE_WAITING_FOR_PUBLISHER) {
       this._state = STATE_CLOSED
       this._terminateAllWaitingConsumers()
+      this.emit('finish')
       return true
     }
     if (this._buffer.length - this._totalWaiters == 0) {
+      // there are no real publishers, only waiters for opportunity to publish => kill 'em
+      let prevState = this._state
       this._state = STATE_CLOSED
       this._terminateAllWaitingPublishers()
+      if (prevState != STATE_CLOSING) {
+        this.emit('finish')
+      }
       return true
     }
     return false
@@ -289,16 +308,17 @@ class Chan {
       return P_RESOLVED
     }
 
-    let resolve
-    let promise = new Promise(res => { resolve = res })
-
     if (this._state == STATE_CLOSING) {
-      this._buffer[ this._buffer.length - 1 ].fns.push(resolve)
-      return promise
+      return this._buffer[ this._buffer.length - 1 ].promise
     }
 
-    let item = { fns: [resolve], fnVal: undefined, fnErr: undefined }
-    item.fnVal = item.fnErr = () => callFns(item.fns)
+    let resolve, promise = new Promise(res => { resolve = res })
+    let item = { promise, fns: [resolve], fnVal: undefined, fnErr: undefined }
+
+    item.fnVal = item.fnErr = () => {
+      this.emit('finish')
+      callFns(item.fns)
+    }
 
     this._buffer.push(item)
     this._state = STATE_CLOSING
@@ -309,8 +329,12 @@ class Chan {
 
   closeNow() {
     if (!this.closeSync()) {
+      let prevState = this._state
       this._state = STATE_CLOSED
       this._terminateAllWaitingPublishers()
+      if (prevState != STATE_CLOSING) {
+        this.emit('finish')
+      }
     }
   }
 
@@ -429,12 +453,22 @@ class Chan {
   }
 
   _terminateAllWaitingPublishers() {
+    let triggerError = this._buffer.length - this._totalWaiters > 0
     this._totalWaiters = 0
     let err = new Error('channel closed')
     while (this._buffer.length) {
       let item = this._buffer.shift()
       item.fnErr && item.fnErr(err)
     }
+    if (triggerError) {
+      this.trigger('error', err)
+    }
+  }
+
+  _nextPromise() {
+    let promise = this._promise
+    this._promise = new Promise((res, rej) => { this._resolve = res; this._reject = rej })
+    return promise
   }
 
   get _constructorName() {
@@ -454,9 +488,10 @@ function callFns(fns) {
 }
 
 
+mixin(Chan, EventEmitterMixin)
 mixin(Chan, Chan$BaseMixin)
 mixin(Chan, Chan$SelectMixin)
-mixin(Chan, EventEmitterMixin)
+mixin(Chan, Chan$WritableStreamMixin)
 
 
 module.exports = Chan
