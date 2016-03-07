@@ -1,7 +1,8 @@
 import {CLOSED, FAILED} from './constants'
 import {TimeoutChan} from './special-chans'
 
-
+// TODO: use null instead of FAILED
+//
 export function selectSync(/* ...chans */) {
   let hasAliveDataChans = false
   let chansWithData = []
