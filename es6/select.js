@@ -21,20 +21,17 @@ export function selectSync(/* ...chans */) {
     }
   }
 
-  if (!chansWithData.length) {
-    if (!hasAliveDataChans) {
-      return CLOSED
-    }
-    if (timeoutChan) {
-      timeoutChan.takeSync() // will throw
-      throw new Error('timeout chan should have thrown but did not o_O')
-    }
-    return FAILED
+  if (timeoutChan && hasAliveDataChans) {
+    chan.takeSync() // will throw
+    throw new Error('timeout chan should have thrown but did not o_O')
   }
 
   let totalChans = chansWithData.length
-  let chan = chansWithData[ totalChans == 1 ? 0 : Math.floor(Math.random() * totalChans) ]
+  if (totalChans == 0) {
+    return hasAliveDataChans ? FAILED : CLOSED
+  }
 
+  let chan = chansWithData[ totalChans == 1 ? 0 : Math.floor(Math.random() * totalChans) ]
   if (!chan.takeSync()) {
     throw new Error('chan should have allowed to take synchronously, but did not o_O')
   }
