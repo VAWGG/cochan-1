@@ -164,26 +164,62 @@ ch.close()
 console.log(ch.canSend) // false
 ```
 
-### Synchronous operation
+### Synchronous operations
 
-There are also `canSendSync` and `canTakeSync` properties that are useful, in
-combination with `sendSync()` and `takeSync()` functions, to perform batch sends
-and receives (see [this example](_examples/async-await/3-batch.js)):
+The `send()` function have one disadvantage: it always returns a `Promise. This means that,`
+in order to ensure that the sent items are either consumed or buffered before sending the
+next one, you always need to wait until the returned `Promise is resolved. And each `Promise`
+gets resolved not earlier than on the next event loop tick, even if the channel can accept
+the next item immediately (e.g. the channel is a buffered one, or there are waiting
+consumers).
+
+The `take()` function is no different: even if there are multiple values already sitting
+in the channel buffer, and/or there are multiple waiting publishers, the returned `Promise`
+gets resolved only on the next tick. This is a property of all Promises that prevents them
+from [releasing Zalgo](http://blog.izs.me/post/59142742143/designing-apis-for-asynchrony).
+
+Sometimes you'd want to send/take as much values as possible, e.g. for performance or synchronization reasons. That's where `sendSync()` and `takeSync()` come to the rescue.
+They return `true` when synchorous sending/consuming succeeded, and `false` otherwise.
+To obtain consumed value of successful `takeSync()`, use `value` property of the channel.
+
+There are also `canSendSync` and `canTakeSync` properties that you can use to determine
+whether `sendSync()` and `takeSync()` will succeed if you call them immediately after,
+which is sometimes useful.
+
+> There is no `canTake` property, as you can always take a value from a channel.
+If the channel is closed, the taken value equals `chan.CLOSED`.
 
 ```js
-// producer:
-while (ch.canSendSync && items.length) {
-  ch.sendSync(items.shift())
+// producer
+while (items.length) {
+  let item = items.shift()
+  if (!ch.sendSync(item)) {
+    await ch.send(item)
+  }
 }
 
-// consumer:
-while (ch.takeSync()) {
-  console.log('got item:', ch.value)
+// consumer
+while (true) {
+  let item = ch.takeSync() ? ch.value : await ch.take()
+  if (item !== chan.CLOSED) {
+    console.log('got item:', ch.value)
+  } else {
+    console.log('channel closed')
+    break
+  }
 }
 ```
 
-There is no `canTake` property, as you can always take a value from a channel.
-If the channel is closed, the taken value equals `chan.CLOSED`.
+Another pair of related functions are `maybeCanSendSync()` and `maybeCanTakeSync()`.
+They return a `Promise` that gets resolved when there is an opportunity to send/consume
+a value synchronously (in which case the returned promise resolves with `true`), or
+the channel is closed (in which case the promise resolves with `false`). Please note
+that these functions do not _guarantee_ that you'll be able to actually send/consume
+a value synchronously, but instead just provide a hint that you can try and succeed with
+a high probability.
+
+There is a [complete example](_examples/async-await/3-batch.js) that demonstrates how
+to use `sendSync()`, `takeSync()` and `maybeCanTakeSync()`.
 
 ### Selection from a set of channels
 
@@ -203,10 +239,11 @@ chan.select(ch1, ch2).then(ch => {
 When several channels have some value, the channel to take the value from
 gets selected randomly.
 
-There is also `chan.selectSync()` that either selects a value and returns the
-channel that the value came from, or returns `chan.FAILED` if there are no
-readily available values/errors in any of the channels, or returns `chan.CLOSED`
-if all non-timeout channels are closed.
+The non-blocking counterpart of `chan.select()` is `chan.selectSync()`, that
+either selects a value and returns the channel that the value came from, or
+returns `chan.FAILED` if there are no readily available values/errors in any
+of the channels, or returns `chan.CLOSED` if all non-timeout channels are
+closed.
 
 ### Timeouts
 

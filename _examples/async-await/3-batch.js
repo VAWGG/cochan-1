@@ -3,23 +3,37 @@ import {p, sleep} from '../utils'
 
 async function batchProducer(items, ch) {
   items = items.slice()
-  p(' -> waiting until can send...')
-  while (await ch.maybeCanSendSync()) {
-    while (ch.canSendSync && items.length) {
-      p(' -> sending item:', items[0])
-      ch.sendSync(items.shift())
+  while (items.length) {
+    let item = items.shift()
+    p(' -> sending item:', item)
+    if (!ch.sendSync(item)) {
+      p(' -> send sync failed, waiting until sent...')
+      await ch.send(item)
     }
-    if (!items.length) {
-      p(' -> done sending all items, closing channel...')
-      await ch.close()
-      p(' -> done closing channel')
-      return
-    }
-    p(' -> waiting until can send...')
   }
+  p(' -> done sending all items, closing channel...')
+  await ch.close()
+  p(' -> done closing channel')
 }
 
 async function batchConsumer(ch) {
+  while (true) {
+    p('<-  ' + (ch.canTakeSync ? 'taking next item (sync)' : 'waiting for next item...'))
+    let item = ch.takeSync() ? ch.value : await ch.take()
+    if (item != chan.CLOSED) {
+      p('<-  got item:', ch.value)
+    } else {
+      p('<-  channel closed')
+      break
+    }
+  }
+}
+
+/**
+ * Another way of writing the same batch consumer,
+ * that uses maybeCanTakeSync().
+ */
+async function batchConsumerVariant(ch) {
   p('<-  waiting until can take...')
   while (await ch.maybeCanTakeSync()) {
     while (ch.takeSync()) {
