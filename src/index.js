@@ -1,9 +1,10 @@
+import assert from 'power-assert'
 import {TimeoutChan, DelayChan} from './special-chans'
 import {EventEmitterMixin} from './event-emitter'
 import {Chan$BaseMixin} from './chan-mixin'
 import {Chan$SelectMixin} from './select'
 import {Chan$WritableStreamMixin} from './writable-stream'
-import {mixin, nop} from './utils'
+import {mixin, repeat, nop} from './utils'
 import {CLOSED, FAILED} from './constants'
 import {P_RESOLVED, P_RESOLVED_WITH_FALSE, P_RESOLVED_WITH_TRUE} from './constants'
 
@@ -50,6 +51,7 @@ class Chan {
   }
 
   get canSendSync() {
+    assert(this._buffer.length - this._totalWaiters >= 0)
     let numNonWaiters = this._buffer.length - this._totalWaiters
     // If waiting for publisher, there must be either at least one "real" consumer in the buffer, or
     // the channel must tolerate buffering (sending without blocking) at least one value.
@@ -59,6 +61,7 @@ class Chan {
   }
 
   get canTakeSync() {
+    assert(this._buffer.length - this._totalWaiters >= 0)
     return this._state != STATE_WAITING_FOR_PUBLISHER
         && this._buffer.length - this._totalWaiters > 0
   }
@@ -95,7 +98,9 @@ class Chan {
         return true
       }
     }
-    // the only possible state now is STATE_NORMAL
+
+    assert(this._state == STATE_NORMAL)
+    assert(this._buffer.length - this._totalWaiters >= 0)
 
     if (this._buffer.length - this._totalWaiters < this._bufferSize) {
       this._buffer.push({ val, type: isError ? TYPE_ERROR : TYPE_VALUE,
@@ -132,7 +137,9 @@ class Chan {
         return P_RESOLVED
       }
     }
-    // the only possible state now is STATE_NORMAL
+
+    assert(this._state == STATE_NORMAL)
+    assert(this._buffer.length - this._totalWaiters >= 0)
 
     if (this._buffer.length - this._totalWaiters < this._bufferSize) {
       this._buffer.push({ val, type: isError ? TYPE_ERROR : TYPE_VALUE,
@@ -155,10 +162,13 @@ class Chan {
     if (this._state == STATE_WAITING_FOR_PUBLISHER || this._buffer.length == 0) {
       return false
     }
-    // now state is either STATE_NORMAL or STATE_CLOSING
+
+    assert(this._state == STATE_NORMAL || this._state == STATE_CLOSING)
 
     let result = this._takeFromWaitingPublisher()
-    if (result.item === FAILED) {
+    let {item} = result
+
+    if (item === FAILED) {
       // on next tick, notify all waiters for opportunity to publish
       if (result.waiters) {
         setImmediate(() => {
@@ -174,7 +184,6 @@ class Chan {
       return false
     }
 
-    let {item} = result
     item.fnVal && item.fnVal()
     
     if (result.waiters) {
@@ -188,6 +197,7 @@ class Chan {
       throw item.val
     }
 
+    assert(item.type == TYPE_VALUE)
     return true
   }
 
@@ -204,6 +214,7 @@ class Chan {
       let {item} = result
       if (item !== FAILED) {
         item.fnVal && item.fnVal()
+        assert(item.type == TYPE_VALUE || item.type == TYPE_ERROR)
         let fn = item.type == TYPE_VALUE ? fnVal : fnErr
         fn && fn(item.val)
         item.waiters && this._triggerWaiters(item.waiters)
@@ -239,14 +250,18 @@ class Chan {
     }
     if (this._state == STATE_NORMAL && this._buffer.length) {
       // there are some waiters for opportunity to publish, but no data in the buffer
+      assert(this._totalWaiters == this._buffer.length)
+      assert.deepEqual(this._buffer.map(x => x.type), repeat(TYPE_WAITER, this._buffer.length))
       let waiters = this._buffer.slice()
       this._buffer.length = 0
       this._totalWaiters = 0
       this._triggerWaiters(waiters, undefined, false)
     } else if (this._state == STATE_CLOSING) {
       // closing but no data left in the buffer
+      assert.ok(false, 'this should not happen')
       return P_RESOLVED_WITH_FALSE
     }
+    assert(this._state == STATE_NORMAL || this._state == STATE_WAITING_FOR_PUBLISHER)
     this._state = STATE_WAITING_FOR_PUBLISHER
     return new Promise(resolve => {
       let onData = (data) => data === CLOSED ? resolve(false) : resolve(true)
@@ -265,11 +280,14 @@ class Chan {
     }
     if (this._state == STATE_WAITING_FOR_PUBLISHER && this._buffer.length) {
       // there are some waiters for opportunity to consume, but no actual consumers
+      assert(this._totalWaiters == this._buffer.length)
+      assert.deepEqual(this._buffer.map(x => x.consumes), repeat(false, this._buffer.length))
       let waiters = this._buffer.slice()
       this._buffer.length = 0
       this._totalWaiters = 0
       this._triggerWaiters(waiters, undefined, false)
     }
+    assert(this._state == STATE_NORMAL || this._state == STATE_WAITING_FOR_PUBLISHER)
     return new Promise(resolve => {
       this._buffer.push({
         fnVal: () => resolve(true),
@@ -292,6 +310,7 @@ class Chan {
     }
     if (this._buffer.length - this._totalWaiters == 0) {
       // there are no real publishers, only waiters for opportunity to publish => kill 'em
+      assert.deepEqual(this._buffer.map(x => x.type), repeat(TYPE_WAITER, this._buffer.length))
       let prevState = this._state
       this._state = STATE_CLOSED
       this._terminateAllWaitingPublishers()
@@ -300,15 +319,19 @@ class Chan {
       }
       return true
     }
+    assert(this._buffer.length - this._totalWaiters > 0)
     return false
   }
 
   close() {
     if (this.closeSync()) {
+      assert(this._state == STATE_CLOSED)
       return P_RESOLVED
     }
 
     if (this._state == STATE_CLOSING) {
+      assert(this._buffer.length > 0)
+      assert(this._buffer[ this._buffer.length - 1 ].promise != undefined)
       return this._buffer[ this._buffer.length - 1 ].promise
     }
 
@@ -339,6 +362,9 @@ class Chan {
   }
 
   _takeFromWaitingPublisher() {
+    assert(this._state == STATE_NORMAL || this._state == STATE_CLOSING)
+    assert(this._buffer.length > 0)
+
     let item = this._buffer.shift()
     let waiters
 
@@ -352,12 +378,17 @@ class Chan {
       item = this._buffer.shift()
     }
 
+    assert(this._totalWaiters >= 0)
+
     if (!item) {
       // no value was produced, so return a list of waiters that should be notified
       // that there is a waiting consumer after the latter is pushed on the list
+      assert(this._buffer.length == 0)
       this._state = STATE_WAITING_FOR_PUBLISHER
       return { item: FAILED, waiters: waiters }
     }
+
+    assert(item.type == TYPE_VALUE || item.type == TYPE_ERROR)
 
     if (item.type == TYPE_VALUE) {
       this._value = item.val
@@ -365,6 +396,8 @@ class Chan {
 
     if (this._state == STATE_CLOSING && this._buffer.length == 1) {
       // the only item left is the one containing closing listeners
+      assert(this._buffer[0].promise != undefined)
+      assert(this._buffer[0].fnVal != undefined)
       this._state = STATE_CLOSED
       // the channel has closed, so notify all waiters for opportunity to publish
       waiters && this._triggerWaiters(waiters, CLOSED, false)
@@ -380,6 +413,9 @@ class Chan {
   }
 
   _sendToWaitingConsumer(val, isError) {
+    assert(this._state == STATE_WAITING_FOR_PUBLISHER)
+    assert(this._buffer.length > 0)
+
     // skip all cancelled consumers, and collect all waiters
     let item = this._buffer.shift()
     let waiters
@@ -396,9 +432,12 @@ class Chan {
       item = this._buffer.shift()
     }
 
+    assert(this._totalWaiters >= 0)
+
     if (!item) {
       // the value wasn't consumed, so return a list of waiters that should be notified
       // after the value have been pushed onto the buffer
+      assert(this._buffer.length == 0)
       this._state = STATE_NORMAL
       return waiters
     }
@@ -410,6 +449,7 @@ class Chan {
     }
 
     if (this._buffer.length == 0) {
+      assert(this._totalWaiters == 0)
       this._state = STATE_NORMAL
     }
 
@@ -442,9 +482,11 @@ class Chan {
       this._buffer.unshift(waiters[i])
     }
     this._totalWaiters += waiters.length
+    assert(this._totalWaiters <= this._buffer.length)
   }
 
   _terminateAllWaitingConsumers() {
+    assert(this._buffer.findIndex(x => x.consumes === undefined) == -1, 'no publishers')
     this._totalWaiters = 0
     while (this._buffer.length) {
       let item = this._buffer.shift()
@@ -453,6 +495,7 @@ class Chan {
   }
 
   _terminateAllWaitingPublishers() {
+    assert(this._buffer.findIndex(x => x.consumes !== undefined) == -1, 'no consumers')
     let triggerError = this._buffer.length - this._totalWaiters > 0
     this._totalWaiters = 0
     let err = new Error('channel closed')

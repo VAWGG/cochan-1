@@ -1,3 +1,4 @@
+import assert from 'power-assert'
 import {CLOSED, FAILED} from './constants'
 import {TimeoutChan} from './special-chans'
 
@@ -23,7 +24,7 @@ export function selectSync(/* ...chans */) {
 
   if (timeoutChan && hasAliveDataChans) {
     chan.takeSync() // will throw
-    throw new Error('timeout chan should have thrown but did not o_O')
+    assert.ok(false, 'timeout chan should have thrown but did not')
   }
 
   let totalChans = chansWithData.length
@@ -31,9 +32,11 @@ export function selectSync(/* ...chans */) {
     return hasAliveDataChans ? FAILED : CLOSED
   }
 
+  assert(timeoutChan === undefined)
+
   let chan = chansWithData[ totalChans == 1 ? 0 : Math.floor(Math.random() * totalChans) ]
   if (!chan.takeSync()) {
-    throw new Error('chan should have allowed to take synchronously, but did not o_O')
+    assert.ok(false, 'chan should have allowed to take synchronously, but did not')
   }
 
   return chan
@@ -92,6 +95,7 @@ export function select(/* ...chans */) {
   }
 
   function unsub() {
+    assert(cancelFns.length > 0)
     for (let i = 0; i < cancelFns.length; ++i) {
       cancelFns[i]()
     }

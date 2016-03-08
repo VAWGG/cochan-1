@@ -63,4 +63,9 @@ function _mixin(dst, src) {
 }
 
 
+export function repeat(x, n) {
+  return new Array(n).fill(x)
+}
+
+
 export function nop() {}

@@ -1,3 +1,4 @@
+import assert from 'power-assert'
 import {nextTick} from './utils'
 import {P_RESOLVED} from './constants'
 
@@ -58,6 +59,7 @@ class WritableStreamMixin {
   }
 
   _emitDrain() {
+    assert(this._needsDrain)
     this._needsDrain = false
     this.emit('drain')
   }
