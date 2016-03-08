@@ -402,6 +402,7 @@ class Chan {
       // the channel has closed, so notify all waiters for opportunity to publish
       waiters && this._triggerWaiters(waiters, CLOSED, false)
       // notify that the channel has closed
+      this._totalWaiters = 0
       this._buffer.shift().fnVal()
     } else if (waiters) {
       // the value will be produced, so put all waiters for opportunity to publish
