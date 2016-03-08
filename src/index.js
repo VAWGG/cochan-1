@@ -4,6 +4,7 @@ import {EventEmitterMixin} from './event-emitter'
 import {Chan$BaseMixin} from './chan-mixin'
 import {Chan$SelectMixin} from './select'
 import {Chan$WritableStreamMixin} from './writable-stream'
+import {mergeTo} from './merge'
 import {mixin, repeat, nop} from './utils'
 import {CLOSED, FAILED} from './constants'
 import {P_RESOLVED, P_RESOLVED_WITH_FALSE, P_RESOLVED_WITH_TRUE} from './constants'
@@ -20,6 +21,12 @@ const TYPE_WAITER = 2
 
 const SUCCESS = []
 
+const MERGE_DEFAULT_OPTS = {
+  dst: undefined,
+  closeDst: true,
+  bufferSize: 0
+}
+
 
 class Chan {
 
@@ -29,6 +36,24 @@ class Chan {
 
   static delay(ms, value) {
     return new DelayChan(ms, value)
+  }
+
+  static merge(/* ...chans */) {
+    let chans = Array.apply(null, arguments)
+    let opts = chans[ chans.length - 1 ]
+    if (opts && opts.constructor === Object) {
+      chans.pop()
+    } else {
+      opts = MERGE_DEFAULT_OPTS
+    }
+    let {dst} = opts; if (dst) {
+      if (!Chan.isChan(dst)) {
+        throw new TypeError('opts.dst must be a channel')
+      }
+    } else {
+      dst = new Chan(opts.bufferSize)
+    }
+    return mergeTo(dst, chans, !!opts.closeDst)
   }
 
   constructor(bufferSize = 0) {
