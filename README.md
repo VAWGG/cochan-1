@@ -79,7 +79,7 @@ Only one consumer can receive a given value. This is the main semantic differenc
 between channels and Observable/FRP patterns, where the same value gets observed
 by all current consumers.
 
-Basic example: [async-await](_examples/async-await/0-intro).
+Basic example: [async-await](_examples/async-await/0-intro).<br>
 Buffering example: [async-await](_examples/async-await/1-buffer),
 [generators-co](_examples/generators-co/1-buffer),
 [plain-promises](_examples/plain-promises/1-buffer).
