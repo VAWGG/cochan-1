@@ -73,6 +73,13 @@ class BaseDelayChan {
       this._tid = undefined
     }
   }
+
+  _timeoutNow() {
+    if (this._tid != undefined) {
+      clearTimeout(this._tid)
+      this._timeout()
+    }
+  }
 }
 
 
@@ -115,6 +122,7 @@ export class TimeoutChan extends BaseDelayChan
     if (Date.now() < this._timeoutDate) {
       return false
     }
+    this._timeoutNow()
     throw this._makeError()
   }
 
@@ -124,6 +132,7 @@ export class TimeoutChan extends BaseDelayChan
     }
     let now = Date.now()
     if (now >= this._timeoutDate) {
+      this._timeoutNow()
       fnErr(this._makeError())
       return nop
     }
@@ -133,10 +142,12 @@ export class TimeoutChan extends BaseDelayChan
   _timeout() {
     this._timeoutDate = 0
     this._tid = undefined
-    let err = this._makeError()
-    while (this._consumers.length) {
-      let fn = this._consumers.shift().fn
-      fn && fn(err)
+    if (this._consumers.length) {
+      let err = this._makeError()
+      while (this._consumers.length) {
+        let fn = this._consumers.shift().fn
+        fn && fn(err)
+      }
     }
   }
 
@@ -235,7 +246,7 @@ export class DelayChan extends BaseDelayChan
 
   _close() {
     this._closed = true
-    if (this._tid) {
+    if (this._tid != undefined) {
       clearTimeout(this._tid)
       this._tid = undefined
     }
