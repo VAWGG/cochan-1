@@ -1,4 +1,4 @@
-import chan from '../../es6'
+import chan from '../../src'
 import {p, sleep} from '../utils'
 
 async function producer(ch, items) {

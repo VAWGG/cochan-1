@@ -1,4 +1,4 @@
-import chan from '../../es6'
+import chan from '../../src'
 
 let ch = new chan()
 

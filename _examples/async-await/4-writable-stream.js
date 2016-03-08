@@ -1,4 +1,4 @@
-import chan from '../../es6'
+import chan from '../../src'
 import Stream from 'readable-stream'
 import {p, sleep} from '../utils'
 
