@@ -79,8 +79,8 @@ Only one consumer can receive a given value. This is the main semantic differenc
 between channels and Observable/FRP patterns, where the same value gets observed
 by all current consumers.
 
-Basic example: [async-await](_examples/async-await/0-intro.js).<br>
-Buffering example: [async-await](_examples/async-await/1-buffer.js),
+> **Basic example**: [async-await](_examples/async-await/0-intro.js).<br>
+> **Buffering example**: [async-await](_examples/async-await/1-buffer.js),
 [generators-co](_examples/generators-co/1-buffer.js),
 [plain-promises](_examples/plain-promises/1-buffer.js).
 
@@ -169,7 +169,7 @@ ch.close()
 console.log(ch.canSend) // false
 ```
 
-Basic example: [async-await](_examples/async-await/0-intro.js).
+> **Basic example**: [async-await](_examples/async-await/0-intro.js).
 
 ### Synchronous operations
 
@@ -225,7 +225,7 @@ that these functions do not _guarantee_ that you'll be able to actually send/con
 a value synchronously, but instead just provide a hint that you can try and succeed with
 a high probability.
 
-Example: [async-await](_examples/async-await/3-batch.js).
+> **Example**: [async-await](_examples/async-await/3-batch.js).
 
 ### Selection from a set of channels
 
@@ -251,7 +251,7 @@ returns `chan.FAILED` if there are no readily available values/errors in any
 of the channels, or returns `chan.CLOSED` if all non-timeout channels are
 closed.
 
-Example: [async-await](_examples/async-await/2-select.js).
+> **Example**: [async-await](_examples/async-await/2-select.js).
 
 ### Timeouts
 
@@ -275,7 +275,7 @@ you to define the single timeout channel for some long-running complex operation
 and then use that channel in various places in the code. That way, all running
 operations will be interrupted at the time of a timeout.
 
-Example: [async-await](_examples/async-await/2-select.js).
+> **Example**: [async-await](_examples/async-await/2-select.js).
 
 ### Merging
 
@@ -305,7 +305,7 @@ var chMerged = chan.merge(ch1, ch2, ch3, {
 })
 ```
 
-Example: [async-await](_examples/async-await/5-merge.js).
+> **Example**: [async-await](_examples/async-await/5-merge.js).
 
 ### Streams
 
@@ -335,7 +335,7 @@ from `streamToChan()`.
 Also note that, when you pipe some stream into a channel, and that source stream
 ends, it will end (close) the channel too. This is a standard Streams behavior.
 
-Example: [async-await](_examples/async-await/4-writable-stream.js).
+> **Example**: [async-await](_examples/async-await/4-writable-stream.js).
 
 
 ## TODO
