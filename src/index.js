@@ -3,7 +3,7 @@ import {Chan} from './chan'
 module.exports = Chan
 export default Chan
 
-import {BaseDelayChan, TimeoutChan, DelayChan} from './special-chans'
+import {SpecialChan, TimeoutChan, DelayChan, PromiseChan} from './special-chans'
 import {EventEmitterMixin} from './event-emitter'
 import {ChanThenable} from './thenable'
 import {select, selectSync} from './select'
@@ -31,6 +31,10 @@ class ChanBase {
 
   static delay(ms, value) {
     return new DelayChan(ms, value)
+  }
+
+  static fromPromise(promise) {
+    return new PromiseChan(promise)
   }
 
   static merge(/* ...chans */) {
@@ -102,5 +106,5 @@ mixin(Chan, ChanBaseMixin)
 mixin(Chan, ChanWritableStreamMixin)
 mixin(Chan, EventEmitterMixin)
 
-mixin(BaseDelayChan, ChanBaseMixin)
-mixin(BaseDelayChan, EventEmitterMixin)
+mixin(SpecialChan, ChanBaseMixin)
+mixin(SpecialChan, EventEmitterMixin)
