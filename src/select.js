@@ -103,8 +103,3 @@ export function select(/* ...chans */) {
 
   return promise
 }
-
-
-export const Chan$SelectMixin = {
-  $static: { selectSync, select }
-}

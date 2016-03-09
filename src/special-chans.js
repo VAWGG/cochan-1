@@ -1,11 +1,10 @@
 import {EventEmitterMixin} from './event-emitter'
-import {Chan$BaseMixin} from './chan-mixin'
-import {mixin, nop} from './utils'
+import {nop} from './utils'
 import {CLOSED, FAILED} from './constants'
 import {P_RESOLVED_WITH_FALSE, P_RESOLVED_WITH_TRUE} from './constants'
 
 
-class BaseDelayChan {
+export class BaseDelayChan {
 
   constructor(ms) {
     this._initChanBase()
@@ -81,10 +80,6 @@ class BaseDelayChan {
     }
   }
 }
-
-
-mixin(BaseDelayChan, EventEmitterMixin)
-mixin(BaseDelayChan, Chan$BaseMixin)
 
 
 export class TimeoutChan extends BaseDelayChan

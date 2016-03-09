@@ -8,6 +8,7 @@ if ('undefined' != typeof process && process.nextTick) {
   nextTick = fn => setTimeout(fn, 0)
 }
 
+
 export function mixin(Cls, protoMixin, staticMixin) {
   if (arguments.length == 2) {
     let keys = Object.keys(protoMixin)
@@ -65,6 +66,27 @@ function _mixin(dst, src) {
 
 export function repeat(x, n) {
   return new Array(n).fill(x)
+}
+
+
+export function isThenable(obj) {
+  return obj && 'function' === typeof obj.then
+}
+
+
+export function describeArray(arr) {
+  return arr && arr.length
+    ? arr.map(describeValue).join(', ')
+    : ''
+}
+
+
+export function describeValue(v) {
+  switch (typeof v) {
+    case 'string': return `"${v}"`
+    case 'function': return `${ v.name || '' }(){ ... }`
+    default: return '' + v
+  }
 }
 
 

@@ -72,6 +72,6 @@ class WritableStreamMixin {
 }
 
 
-export const Chan$WritableStreamMixin = {
+export const ChanWritableStreamMixin = {
   $proto: WritableStreamMixin.prototype
 }

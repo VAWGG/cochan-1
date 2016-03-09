@@ -1,4 +1,4 @@
-export default class Chan$Thenable {
+export class ChanThenable {
 
   constructor(chan) {
     this._chan = chan
@@ -41,5 +41,4 @@ export default class Chan$Thenable {
   catch(fnErr) {
     return this.then(undefined, fnErr)
   }
-
 }
