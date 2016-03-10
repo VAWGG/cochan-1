@@ -525,5 +525,6 @@ ends, it will end (close) the channel too. This is a standard Streams behavior.
 
 * Quick demo.
 * API docs.
+* Cover with tests.
 * Provide missing examples for `generators-co` and `plain-promises`.
-* [Async iteration](https://github.com/tc39/proposal-async-iteration)?
+* Support [async iteration](https://github.com/tc39/proposal-async-iteration)?
