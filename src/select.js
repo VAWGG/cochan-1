@@ -15,6 +15,7 @@ export function selectSync(/* ...chans */) {
       if (chan instanceof TimeoutChan) {
         timeoutChan = chan
       } else {
+        hasAliveDataChans = true
         chansWithData.push(chan)
       }
     } else if (!(chan.isClosed || chan instanceof TimeoutChan)) {
@@ -23,7 +24,7 @@ export function selectSync(/* ...chans */) {
   }
 
   if (timeoutChan && hasAliveDataChans) {
-    chan.takeSync() // will throw
+    timeoutChan.takeSync() // will throw
     assert.ok(false, 'timeout chan should have thrown but did not')
   }
 
