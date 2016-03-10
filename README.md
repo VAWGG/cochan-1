@@ -290,7 +290,7 @@ you to define the single timeout channel for some long-running complex operation
 and then use that channel in various places in the code. That way, all running
 operations will be interrupted at the time of a timeout.
 
-> **Selection example**: [async-await](_examples/async-await/2-select.js).
+> **Selection example**: [async-await](_examples/async-await/2-select.js).<br>
 > **chan.timeout example**: [async-await](_examples/async-await/6-special-chans.js).
 
 ### Merging
@@ -393,7 +393,7 @@ note that all functions have some return value: if you don't include explicit
 `return` keyword, the implicit `return` of `undefined` will be inserted
 automatically by the JavaScript VM.
 
-> **Iterator example**: [async-await](_examples/async-await/7-iterator.js).
+> **Iterator example**: [async-await](_examples/async-await/7-iterator.js).<br>
 > **Generator example**: [async-await](_examples/async-await/8-generator.js).
 
 ### Async generators
