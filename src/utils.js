@@ -74,6 +74,26 @@ export function isThenable(obj) {
 }
 
 
+export function isIterator(obj) {
+  return obj && 'function' === typeof obj.next
+}
+
+
+export function isGenerator(obj) {
+  return obj && 'function' === typeof obj.next && 'function' === typeof obj.throw
+}
+
+// From here: https://github.com/tj/co/blob/b3ad55a/index.js#L215
+//
+export function isGeneratorFunction(obj) {
+  if (!obj) return false
+  let {constructor} = obj; return constructor && (
+    'GeneratorFunction' === constructor.name ||
+    'GeneratorFunction' === constructor.displayName ||
+    isGenerator(constructor.prototype))
+}
+
+
 export function describeArray(arr) {
   return arr && arr.length
     ? arr.map(describeValue).join(', ')
@@ -87,6 +107,23 @@ export function describeValue(v) {
     case 'function': return `${ v.name || '' }(){ ... }`
     default: return '' + v
   }
+}
+
+
+export function defaultTo(def, value) {
+  return value === undefined ? def : value
+}
+
+
+export function extend(dst, src) {
+  if (src) {
+    let keys = Object.keys(src)
+    for (let i = 0; i < keys.length; ++i) {
+      let key = keys[i]
+      dst[key] = src[key]
+    }
+  }
+  return dst
 }
 
 

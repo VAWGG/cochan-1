@@ -5,8 +5,24 @@ communication between concurrent activities, e.g. coroutines. Plays especially
 well with generators or ES7 async/await, but doesn't depend on these language
 features. Depends on `Promise` being available.
 
-Supports buffering, selection and merging from multiple channels, non-blocking
-operations, errors, channel closing and interoperation with Node.js streams.
+Supported features:
+
+* [Blocking sends and receives](#basic-operations)
+* [Buffering](#basic-operations)
+* [Channel closing](#closing)
+* Errors (readme TODO)
+* [Synchronous (non-blocking) operations](#synchronous-operations)
+* [Selection from a set of channels](#selection-from-a-set-of-channels)
+* [Timeouts](#timeouts)
+* [Merging multiple channels into one](#merging)
+* [Making channels from Promises](#making-a-channel-from-a-promise)
+* Making channels from [iterables, iterators, generators](#iterables-iterators-and-generators)
+  and [async generators](#async-generators)
+* [Piping Node.js streams into channels](#streams)
+
+All supported operations respect and propagate backpressure, so, for example,
+if you make a chan from a generator function, the function's iterator won't
+be advanced until the last produced value is either consumed or buffered.
 
 [golang channels]: https://tour.golang.org/concurrency/2
 
@@ -23,7 +39,7 @@ the same logic, and should give the same, or very similar, output.
 So [_examples/async-await/1-buffer.js](_examples/async-await/1-buffer.js),
 [_examples/generators-co/1-buffer.js](_examples/generators-co/1-buffer.js)
 and [_examples/promises/1-buffer.js](_examples/promises/1-buffer.js) differ
-only in used language features.
+only in the used language features.
 
 
 ## Usage
@@ -52,7 +68,7 @@ this channel can buffer (defaults to `0`):
 var bufferedCh = new chan(3)
 ```
 
-To send a value to a channel, use `send()`:
+To send a value to a channel, use `send(value)`:
 
 ```js
 ch.send('some value')
@@ -173,28 +189,25 @@ console.log(ch.canSend) // false
 
 ### Synchronous operations
 
-The `send()` function have one disadvantage: it always returns a `Promise. This means that,`
+The `send()` function have one disadvantage: it always returns a `Promise`. It means that,
 in order to ensure that the sent items are either consumed or buffered before sending the
 next one, you always need to wait until the returned `Promise is resolved. And each `Promise`
 gets resolved not earlier than on the next event loop tick, even if the channel can accept
-the next item immediately (e.g. the channel is a buffered one, or there are waiting
-consumers).
+the next item immediately (e.g. the channel is a buffered one, or there are consumers
+waiting for a value on that channel).
 
 The `take()` function is no different: even if there are multiple values already sitting
 in the channel buffer, and/or there are multiple waiting publishers, the returned `Promise`
 gets resolved only on the next tick. This is a property of all Promises that prevents them
 from [releasing Zalgo](http://blog.izs.me/post/59142742143/designing-apis-for-asynchrony).
 
-Sometimes you'd want to send/take as much values as possible, e.g. for performance or synchronization reasons. That's where `sendSync()` and `takeSync()` come to the rescue.
-They return `true` when synchorous sending/consuming succeeded, and `false` otherwise.
+Sometimes you'd want to send/take as much values as possible at once, e.g. for performance
+or synchronization reasons. That's where `sendSync(value)` and `takeSync()` come to the
+rescue. They return `true` when synchorous sending/consuming succeeded, and `false` otherwise.
 To obtain consumed value of successful `takeSync()`, use `value` property of the channel.
 
-There are also `canSendSync` and `canTakeSync` properties that you can use to determine
-whether `sendSync()` and `takeSync()` will succeed if you call them immediately after,
-which is sometimes useful.
-
-> There is no `canTake` property, as you can always take a value from a channel.
-If the channel is closed, the taken value equals `chan.CLOSED`.
+There are also `canSendSync` and `canTakeSync` properties that can be used to determine
+whether `sendSync()` and `takeSync()` will succeed if you call them immediately after.
 
 ```js
 // producer
@@ -217,6 +230,9 @@ while (true) {
 }
 ```
 
+> There is no `canTake` property, as you can always take a value from a channel.
+If the channel is closed, the taken value equals `chan.CLOSED`.
+
 Another pair of related functions are `maybeCanSendSync()` and `maybeCanTakeSync()`.
 They return a `Promise` that gets resolved when there is an opportunity to send/consume
 a value synchronously (in which case the returned promise resolves with `true`), or
@@ -230,7 +246,7 @@ a high probability.
 ### Selection from a set of channels
 
 To consume the first value that appears in a set of channels, and find out which
-channel that value came from, use `chan.select()`:
+channel that value came from, use `chan.select(...chans)`:
 
 ```js
 chan.select(ch1, ch2).then(ch => {
@@ -245,18 +261,17 @@ chan.select(ch1, ch2).then(ch => {
 When several channels have some value, the channel to take the value from
 gets selected randomly.
 
-The non-blocking counterpart of `chan.select()` is `chan.selectSync()`, that
-either selects a value and returns the channel that the value came from, or
-returns `chan.FAILED` if there are no readily available values/errors in any
-of the channels, or returns `chan.CLOSED` if all non-timeout channels are
-closed.
+The non-blocking counterpart of `chan.select(...chans)` is `chan.selectSync(...chans)`,
+that either selects a value and returns the channel that the value came from, or returns
+`chan.FAILED` if there are no readily available values/errors in any of the channels, or
+returns `chan.CLOSED` if all non-timeout channels are closed.
 
 > **Example**: [async-await](_examples/async-await/2-select.js).
 
 ### Timeouts
 
-To add a configurable timeout to receive operation, use `chan.timeout()` in
-combination with `chan.select()`:
+To add a configurable timeout to receive operation, use `chan.timeout(ms[, msg])` in
+combination with `chan.select(...chans)`:
 
 ```js
 var chTimeout = chan.timeout(5000) // to pass optional message, use second arg
@@ -275,17 +290,19 @@ you to define the single timeout channel for some long-running complex operation
 and then use that channel in various places in the code. That way, all running
 operations will be interrupted at the time of a timeout.
 
-> **Example**: [async-await](_examples/async-await/2-select.js).
+> **Selection example**: [async-await](_examples/async-await/2-select.js).
+> **chan.timeout example**: [async-await](_examples/async-await/6-special-chans.js).
 
 ### Merging
 
 Sometimes you'll want to merge the output of multiple channels into one, and close
-that resulting channel when all source channels has closed. The `chan.merge()` helper
-function does exactly this, respecting backpressure generated by the output channel.
+that resulting channel when all source channels has closed. The `chan.merge(...chans)`
+helper function does exactly this, respecting backpressure generated by the output
+channel.
 
-This is somewhat similar to `select()`, but differs in that you are not interested
-from which channel each output value came from, and you get a channel instead of
-one-time receive operation.
+This is somewhat similar to `select(...chans)`, but differs in that you are not
+interested from which channel each output value came from, and you get a channel
+instead of one-time receive operation.
 
 ```js
 var chMerged = chan.merge(ch1, ch2, ch3)
@@ -307,6 +324,172 @@ var chMerged = chan.merge(ch1, ch2, ch3, {
 
 > **Example**: [async-await](_examples/async-await/5-merge.js).
 
+### Making a channel from a Promise
+
+To convert a Promise to a channel, use `chan.fromPromise(promise)`. The resulting
+channel will produce exactly one value/error and then immediately close.
+
+```js
+var ch = chan.fromPromise(somePromise)
+```
+
+> **Example**: [async-await](_examples/async-await/6-special-chans.js).
+
+### Iterables, iterators and generators
+
+To make a channel from an iterable, use `chan.fromIterable(iterable[, opts])`:
+
+```js
+var ch1 = chan.fromIterable('abc') // will produce 'a', 'b', 'c', and then close
+var ch2 = chan.fromIterable([1, 2, 3]) // will produce 1, 2, 3, and then close
+```
+
+This function obtains an iterator from an iterable, exhausts it, sending all produced
+values into the resulting channel, and then closes the channel. The second optional
+argument allows to pass additional options (defaults are shown):
+
+```js
+var ch = chan.fromIterable('abc', {
+  chan: undefined, // use the passed channel instead of creating a new one
+  closeChan: true, // close the resulting chan when the iterator is exhausted
+  bufferSize: 0, // what buffer size to use when creating new channel (when opts.chan == undefined)
+  sendRetval: false, // whether to send the last value of iterator (when state.done == true)
+  async: false, // allow async iteration (see next section for this and next options)
+  asyncRunner: thenableRunner,
+  getAsyncRunnableType: thenableRunner.getRunnableType
+})
+```
+
+If you want to make a channel from an already-obtained or custom iterator instead
+of an iterable, use `chan.fromIterator(iter[, opts])`. It supports the same set of
+options:
+
+```js
+var arrayIter = [ 1, 2, 3 ][ Symbol.iterator ]()
+var arrayChan = chan.fromIterator(arrayIter)
+
+var myIter = new MyCustomIter()
+var myIterChan = chan.fromIterator(myIter, { sendRetval: true })
+```
+
+And, finally, you can also make a channel from a generator with
+`chan.fromGenerator(gen[, opts])` function. Again, it supports the same
+options as `chan.fromIterable()` and `chan.fromIterator()`:
+
+```js
+function* $generator(x) {
+  yield 1
+  yield x
+  return 2
+}
+
+let genChan = chan.fromGenerator($generator(33), { sendRetval: true })
+// produces 1, 33, 2, and then closes
+```
+
+The `sendRetval` option, in the case of generators, defines whether the value
+produced with `return` (instead of `yield`) should be sent to the channel. Please
+note that all functions have some return value: if you don't include explicit
+`return` keyword, the implicit `return` of `undefined` will be inserted
+automatically by the JavaScript VM.
+
+> **Iterator example**: [async-await](_examples/async-await/7-iterator.js).
+> **Generator example**: [async-await](_examples/async-await/8-generator.js).
+
+### Async generators
+
+Converting a generator into a channel is cool, but generators have a limitation:
+they are synchronous. Some libraries, like `co`, allow to turn them into an
+`async`-like functions, with `yield` meaning `await`:
+
+```js
+function* $asyncGenerator() {
+  let result1 = yield somethingThatReturnsAPromise()
+  let result2 = yield somethingThatReturnsAPromise()
+  return result1 + result2
+}
+
+let promise = co($asyncGenerator())
+promise.then(result => console.log('result:', result))
+```
+
+But then you lose the ability to use `yield` for sending a value to a channel,
+because `yield` now means "await a Promise" and, moreover, you cannot pass
+the resulting thing into `fromGenerator`, like this:
+
+```js
+let ch = chan.fromGenerator(co($asyncGenerator))
+```
+
+That's because `co($asyncGenerator)` returns a Promise, and `chan.fromGenerator()`
+expects a generator. One possible solution is to forget about `chan.fromGenerator()`,
+and use `chan.send()` to send values to the channel:
+
+```js
+function* $asyncGenerator(ch) {
+  let result1 = yield smthThatReturnsPromise()
+  yield ch.send(result1)
+  let result2 = yield smthThatReturnsPromise()
+  yield ch.send(result2)
+}
+
+let ch = new chan()
+co($asyncGenerator(chan)).then(result => console.log(result))
+```
+
+In this case, you may as well use async/await instead of generators and `co`:
+
+```js
+async function asyncFn(ch) {
+  let result1 = await smthThatReturnsPromise()
+  await ch.send(result1)
+  let result2 = await smthThatReturnsPromise()
+  await ch.send(result2)
+}
+
+let ch = new chan()
+asyncFn(chan).then(result => console.log(result))
+```
+
+Another option is to use `chan.fromGenerator()` with `opts.async` set to `true`:
+
+```js
+function* $asyncGenerator() {
+  let result1 = yield smthThatReturnsPromise()
+  yield result1
+  let result2 = yield smthThatReturnsPromise()
+  yield result2
+}
+
+let ch = chan.fromGenerator($asyncGenerator, { async: true })
+```
+
+It works as follows: if you `yield` a Promise, then this promise will be awaited
+and the result returned back into the function, just like with the `await` keyword
+in an async function. But if you `yield` a non-Promise value, it will be sent into
+the resulting channel, and the execution of the function will resume after the
+sent value is either buffered or consumed.
+
+There are three async-related options that you can specify (among others) in the
+second "options" argument of `chan.fromGenerator()`: `async`, `asyncRunner` and
+`getAsyncRunnableType`. The first one, `async`, is a flag that turns the async
+functionality on or off (off by default).
+
+The remaining two options allow you to support async runnables other than Promises.
+The `getAsyncRunnableType(value)` function is called each time a generator yields
+some value, which is passed into the only argument of that function. If it returns
+`undefined` or `null`, then the value is considered a usual value and gets sent
+into a channel. Otherwise, the value is considered a runnable.
+
+In that case, the `asyncRunner(value, type)` is called, with the runnable passed to
+the first argument, and the type returned from `getAsyncRunnableType(value)` to
+the second. If this function returns a non-Promise value or throws an error, the
+returned value/error is sent back into the generator immediately. Otherwise, the
+returned Promise is awaited, and the resulting value/error is sent into the generator
+when that Promise settles.
+
+> **Example**: [async-await](_examples/async-await/9-async-generator.js).
+
 ### Streams
 
 To send all values from an object-mode Streams2/3 stream to a channel, respecting
@@ -315,10 +498,10 @@ each normal channel is also a Streams3 writable stream:
 
 ```js
 function streamToChan(stream) {
-  let chan = new chan(5)
-  chan.on('error', err => console.log(err))
-  stream.pipe(chan)
-  return chan
+  var ch = new chan(5)
+  ch.on('error', err => console.log(err))
+  stream.pipe(ch)
+  return ch
   // the shorter, but not so readable, version:
   // return stream.pipe(new chan(5)).on('error', err => console.log(err))
 }
@@ -329,7 +512,7 @@ a channel, or use Streams-specific `chan::write()` or `chan::end()` functions, a
 attempt to write into a closed channel will emit `error` event, which will crash
 your app unless you handle it.
 
-In the snippet above, this could happen if you manually close the channel returned
+In the snippet above, this could happen if you manually closed the channel returned
 from `streamToChan()`.
 
 Also note that, when you pipe some stream into a channel, and that source stream
