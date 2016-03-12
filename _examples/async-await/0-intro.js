@@ -1,4 +1,5 @@
 import chan from '../../src'
+import {p} from '../utils'
 
 let ch = new chan()
 
@@ -17,13 +18,13 @@ async function consumer() {
   while (true) {
     let item = await ch.take()
     if (item == ch.CLOSED) break
-    console.log(item)
+    p(item)
   }
-  console.log(`channel closed`)
+  p(`channel closed`)
 }
 
-producerThatRespectsBackpressure()
+producerThatRespectsBackpressure().catch(p)
 producerThatDoesntRespectBackpressure()
-consumer()
+consumer().catch(p)
 
-setTimeout(() => ch.close(), 100)
+setTimeout(() => ch.close(), 500)

@@ -4,7 +4,7 @@ import {p, sleep} from '../utils'
 function* $fibonacci() {
   let pre = 0, cur = 1
   while (true) {
-    p(` -> producing: ${cur}`)
+    p(` -> producing value: ${cur}`)
     yield cur
     cur = pre + cur
     pre = cur - pre

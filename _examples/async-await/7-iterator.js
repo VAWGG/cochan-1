@@ -13,7 +13,7 @@ class ClosedRangeIterator {
       p(' -> iterator finished')
       return { value: undefined, done: true }
     } else {
-      p(' -> iterating:', this._i)
+      p(' -> producing new value:', this._i)
       return { value: this._i, done: false }
     }
   }

@@ -5,7 +5,6 @@ async function producer(ch, items) {
   for (let item of items) {
     p(` -> sending item: ${ item }...`)
     await ch.send(item)
-    await sleep(0)
   }
   p(` -> closing channel...`)
   await ch.close()
