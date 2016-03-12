@@ -1,12 +1,12 @@
 import {Chan} from './chan'
 import {SpecialChan, TimeoutChan, DelayChan, PromiseChan} from './special-chans'
 import {EventEmitterMixin} from './event-emitter'
-import {ChanThenable} from './thenable'
+import {Thenable} from './thenable'
 import {select, selectSync} from './select'
 import {ChanWritableStreamMixin} from './writable-stream'
 import {mergeTo} from './merge'
 import {fromIterator, thenableRunner} from './iterator'
-import {ISCHAN, CLOSED, FAILED} from './constants'
+import {ISCHAN, CLOSED, FAILED, OP_TAKE} from './constants'
 import {mixin, describeArray, describeValue, defaultTo, extend, nop} from './utils'
 import {isIterator, isGenerator, isGeneratorFunction} from './utils'
 import scheduler from './scheduler'
@@ -128,7 +128,9 @@ class ChanBase {
   }
 
   take() {
-    return this._thenable
+    let promise = new Thenable(this, OP_TAKE)
+    promise._cancel = this._take(promise._fulfillBound, promise._rejectBound, true)
+    return promise
   }
 
   toString() {
@@ -142,10 +144,6 @@ class ChanBase {
 
   inspect() {
     return this.toString()
-  }
-
-  _initChanBase() {
-    this._thenable = new ChanThenable(this)
   }
 
   get _constructorName() {

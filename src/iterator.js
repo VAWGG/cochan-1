@@ -23,7 +23,7 @@ export function fromIterator(iter, chan, closeChan, sendRetval, runner, getRunna
     }
     if (done) {
       if ((sendRetval || valueToSendIsError) && !chan.sendSync(valueToSend, valueToSendIsError)) {
-        chan._send(valueToSend, valueToSendIsError, undefined, sendToActiveChanFailed)
+        chan._send(valueToSend, valueToSendIsError, undefined, sendToActiveChanFailed, false)
       }
       return end()
     }
@@ -85,14 +85,14 @@ export function fromIterator(iter, chan, closeChan, sendRetval, runner, getRunna
       if (hasNextValue) {
         // iter has not ended yet => enqueue the value into the chan, and
         // resume iteration after it's accepted
-        chan._send(state.value, state.isError, onValueSent, sendToActiveChanFailed)
+        chan._send(state.value, state.isError, onValueSent, sendToActiveChanFailed, false)
       } else {
         // iter has ended, so we just need to send its last value (if iter is
         // generator), and end the whole thing; we don't need to wait until
         // the value is accepted, because even if end() calls chan.close(), 
         // the latter will do this waiting for us
         if (sendRetval || state.isError) {
-          chan._send(state.value, state.isError, undefined, sendToActiveChanFailed)
+          chan._send(state.value, state.isError, undefined, sendToActiveChanFailed, false)
         }
         end()
       }

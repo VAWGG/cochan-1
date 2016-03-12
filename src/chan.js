@@ -1,7 +1,8 @@
 import assert from 'power-assert'
 import scheduler from './scheduler'
+import {Thenable} from './thenable'
 import {repeat, nop} from './utils'
-import {CLOSED, FAILED} from './constants'
+import {CLOSED, FAILED, OP_SEND} from './constants'
 import {P_RESOLVED, P_RESOLVED_WITH_FALSE, P_RESOLVED_WITH_TRUE} from './constants'
 
 
@@ -13,6 +14,7 @@ const STATE_CLOSED = 3
 const TYPE_VALUE = 0
 const TYPE_ERROR = 1
 const TYPE_WAITER = 2
+const TYPE_CANCELLED = 3
 
 const SUCCESS = []
 
@@ -20,7 +22,6 @@ const SUCCESS = []
 export class Chan {
 
   constructor(bufferSize = 0) {
-    this._initChanBase()
     this._initWritableStream()
     this._state = STATE_NORMAL
     this._bufferSize = bufferSize
@@ -109,37 +110,49 @@ export class Chan {
     return false
   }
 
-  send(val, isError) {
-    return this._send(val, isError, this._resolve, this._reject) || this._nextPromise()
+  send(value, isError) {
+    let promise = this._promise
+    let state = this._send(value, isError, promise._fulfillBound, promise._rejectBound, true)
+    if (state.promise) {
+      return state.promise
+    }
+    promise._op = OP_SEND
+    promise._cancel = state.cancel
+    this._nextPromise()
+    return promise
   }
 
-  _send(val, isError, fnOk, fnErr) {
+  _send(val, isError, fnOk, fnErr, needsCancelFn) {
     if (this._state >= STATE_CLOSING) {
-      return Promise.reject(new Error('attempt to send into a closed channel'))
+      return {
+        promise: Thenable.reject(new Error('attempt to send into a closed channel'), this, OP_SEND),
+        cancel: nop
+      }
     }
 
     let waiters
     if (this._state == STATE_WAITING_FOR_PUBLISHER) {
       waiters = this._sendToWaitingConsumer(val, isError)
       if (waiters === SUCCESS) { // value was consumed
-        return P_RESOLVED
+        return { promise: this._pSendResolved, cancel: nop }
       }
     }
 
     assert(this._state == STATE_NORMAL)
     assert(this._buffer.length - this._totalWaiters >= 0)
 
+    let promise = undefined
+
     if (this._buffer.length - this._totalWaiters < this._bufferSize) {
-      this._buffer.push({ val, type: isError ? TYPE_ERROR : TYPE_VALUE,
-        fnVal: undefined, fnErr: undefined })
-      waiters && this._triggerWaiters(waiters, val, isError)
-      return P_RESOLVED
+      fnOk = undefined
+      fnErr = undefined
+      promise = this._pSendResolved
     }
 
     this._buffer.push({ val, type: isError ? TYPE_ERROR : TYPE_VALUE, fnVal: fnOk, fnErr })
     waiters && this._triggerWaiters(waiters, val, isError)
 
-    return undefined
+    return { promise, cancel: needsCancelFn ? () => { item.type = TYPE_CANCELLED } : nop }
   }
 
   takeSync() {
@@ -356,13 +369,15 @@ export class Chan {
     let item = this._buffer.shift()
     let waiters
 
-    while (item && item.type == TYPE_WAITER) {
-      if (!waiters) {
-        waiters = [item]
-      } else {
-        waiters.push(item)
+    while (item && item.type > TYPE_ERROR) {
+      if (item.type == TYPE_WAITER) {
+        if (!waiters) {
+          waiters = [item]
+        } else {
+          waiters.push(item)
+        }
+        --this._totalWaiters
       }
-      --this._totalWaiters
       item = this._buffer.shift()
     }
 
@@ -499,8 +514,14 @@ export class Chan {
 
   _nextPromise() {
     let promise = this._promise
-    this._promise = new Promise((res, rej) => { this._resolve = res; this._reject = rej })
+    this._promise = new Thenable(this, 100)
     return promise
+  }
+
+  get _pSendResolved() {
+    return this._pSendResolved_ || (
+      this._pSendResolved_ = Thenable.resolve(undefined, this, OP_SEND)
+    )
   }
 
   get _constructorName() {

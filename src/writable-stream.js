@@ -22,13 +22,12 @@ class WritableStreamMixin {
       cb = encoding
       encoding = null
     }
-    if (this.canSendSync) {
-      this.sendSync(chunk)
+    if (this.sendSync(chunk)) {
       cb && nextTick(cb)
       return true
     }
-    let ret = this._send(chunk, false, cb, cb)
-    ret && ret.then(cb, cb)
+    let {promise} = this._send(chunk, false, cb, cb, false)
+    promise && promise.then(cb, cb)
     this._needsDrain = true
     return false
   }

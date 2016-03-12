@@ -138,7 +138,7 @@ export function mergeTo(dst, srcs, closeDst) {
     if (hasNextValue) {
       // dst can't take that much data synchronously => unsub from srcs and enqueue taken value
       unsubAll()
-      dst._send(value, isError, takeNext, onSendError)
+      dst._send(value, isError, takeNext, onSendError, false)
     // dst can take more data synchronously, but srcs cannot provide it yet
     } else if (src) {
       // value came asynchronously from an src => resubscribe to that src

@@ -10,7 +10,6 @@ import {P_RESOLVED_WITH_FALSE, P_RESOLVED_WITH_TRUE} from './constants'
 export class SpecialChan {
 
   constructor() {
-    this._initChanBase()
     this._consumers = []
   }
 
