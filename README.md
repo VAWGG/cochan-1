@@ -263,7 +263,7 @@ gets selected randomly.
 
 The non-blocking counterpart of `chan.select(...chans)` is `chan.selectSync(...chans)`,
 that either selects a value and returns the channel that the value came from, or returns
-`chan.FAILED` if there are no readily available values/errors in any of the channels, or
+`null` if there are no readily available values/errors in any of the channels, or
 returns `chan.CLOSED` if all non-timeout channels are closed.
 
 > **Example**: [async-await](_examples/async-await/2-select.js).

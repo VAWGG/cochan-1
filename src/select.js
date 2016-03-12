@@ -1,9 +1,7 @@
 import assert from 'power-assert'
-import {CLOSED, FAILED} from './constants'
+import {CLOSED} from './constants'
 import {TimeoutChan} from './special-chans'
 
-// TODO: use null instead of FAILED
-//
 export function selectSync(/* ...chans */) {
   let hasAliveDataChans = false
   let chansWithData = []
@@ -30,7 +28,7 @@ export function selectSync(/* ...chans */) {
 
   let totalChans = chansWithData.length
   if (totalChans == 0) {
-    return hasAliveDataChans ? FAILED : CLOSED
+    return hasAliveDataChans ? null : CLOSED
   }
 
   assert(timeoutChan === undefined)
@@ -60,7 +58,7 @@ export function select(/* ...chans */) {
     return Promise.reject(syncResult.value)
   }
 
-  if (syncResult.value !== FAILED) {
+  if (syncResult.value) {
     return Promise.resolve(syncResult.value)
   }
 

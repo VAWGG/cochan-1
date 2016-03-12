@@ -1,7 +1,7 @@
 import assert from 'power-assert'
 import {EventEmitterMixin} from './event-emitter'
 import {nop, mixin} from './utils'
-import {CLOSED, FAILED} from './constants'
+import {CLOSED} from './constants'
 import {P_RESOLVED_WITH_FALSE, P_RESOLVED_WITH_TRUE} from './constants'
 
 

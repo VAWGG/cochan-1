@@ -6,7 +6,7 @@ import {select, selectSync} from './select'
 import {ChanWritableStreamMixin} from './writable-stream'
 import {mergeTo} from './merge'
 import {fromIterator, thenableRunner} from './iterator'
-import {ISCHAN, CLOSED, FAILED, OP_TAKE} from './constants'
+import {ISCHAN, CLOSED, OP_TAKE} from './constants'
 import {mixin, describeArray, describeValue, defaultTo, extend, nop} from './utils'
 import {isIterator, isGenerator, isGeneratorFunction} from './utils'
 import scheduler from './scheduler'
@@ -161,7 +161,8 @@ class ChanBase {
 
 
 ChanBase.CLOSED = CLOSED
-ChanBase.FAILED = FAILED
+ChanBase.prototype.CLOSED = CLOSED
+
 ChanBase.select = select
 ChanBase.selectSync = selectSync
 
@@ -169,9 +170,6 @@ ChanBase.merge.setDefaults = (opts) => { extend(MERGE_DEFAULTS, opts) }
 ChanBase.fromIterable.setDefaults = (opts) => { extend(FROM_ITERABLE_DEFAULTS, opts) }
 ChanBase.fromIterator.setDefaults = (opts) => { extend(FROM_ITERATOR_DEFAULTS, opts) }
 ChanBase.fromGenerator.setDefaults = (opts) => { extend(FROM_GENERATOR_DEFAULTS, opts) }
-
-ChanBase.prototype.CLOSED = CLOSED
-ChanBase.prototype.FAILED = FAILED
 
 
 function fromIteratorWithOpts(iter, opts, defaults) {
