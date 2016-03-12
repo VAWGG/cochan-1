@@ -1,4 +1,5 @@
 import assert from 'power-assert'
+import scheduler from './scheduler'
 import {repeat, nop} from './utils'
 import {CLOSED, FAILED} from './constants'
 import {P_RESOLVED, P_RESOLVED_WITH_FALSE, P_RESOLVED_WITH_TRUE} from './constants'
@@ -99,7 +100,7 @@ export class Chan {
 
     if (waiters) {
       // on next tick, notify all waiters for opportunity to consume
-      setImmediate(() => {
+      scheduler.schedule(() => {
         let value = this._state == STATE_CLOSED ? CLOSED : undefined
         this._triggerWaiters(waiters, value, false)
       })
@@ -158,7 +159,7 @@ export class Chan {
     if (item === FAILED) {
       // on next tick, notify all waiters for opportunity to publish
       if (result.waiters) {
-        setImmediate(() => {
+        scheduler.schedule(() => {
           if (this._state < STATE_CLOSING) {
             this._triggerWaiters(result.waiters, undefined, false)
             this._needsDrain && this._emitDrain()
@@ -174,7 +175,7 @@ export class Chan {
     item.fnVal && item.fnVal()
     
     if (result.waiters) {
-      setImmediate(() => {
+      scheduler.schedule(() => {
         this._triggerWaiters(result.waiters, undefined, false)
         this._needsDrain && this._emitDrain()
       })
