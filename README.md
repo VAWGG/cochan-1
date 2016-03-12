@@ -1,5 +1,9 @@
 # cochan
 
+[![NPM package version][npm-image]][npm-url]
+![Dependencies][dependencies-image]
+[![NPM Downloads][downloads-image]][downloads-url]
+
 Channel communication primitive, modelled after [golang channels]. Useful for
 communication between concurrent activities, e.g. coroutines. Plays especially
 well with generators or ES7 async/await, but doesn't depend on these language
@@ -528,3 +532,10 @@ ends, it will end (close) the channel too. This is a standard Streams behavior.
 * Cover with tests.
 * Provide missing examples for `generators-co` and `plain-promises`.
 * Support [async iteration](https://github.com/tc39/proposal-async-iteration)?
+
+
+[npm-image]: https://img.shields.io/npm/v/cochan.svg?style=flat-square
+[npm-url]: https://npmjs.org/package/cochan
+[downloads-image]: http://img.shields.io/npm/dm/cochan.svg?style=flat-square
+[downloads-url]: https://npmjs.org/package/cochan
+[dependencies-image]: https://www.versioneye.com/nodejs/cochan/badge.svg?style=flat
