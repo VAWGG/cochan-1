@@ -22,14 +22,14 @@ const iteratorSymbol = 'function' === typeof Symbol
 
 
 const MERGE_DEFAULTS = {
-  dst: undefined,
-  closeDst: true,
+  dst: undefined, // TODO: rename to "output"
+  closeDst: true, // TODO: rename to "closeOutput"
   bufferSize: 0
 }
 
 const FROM_ITERABLE_DEFAULTS = {
-  chan: undefined,
-  closeChan: true,
+  chan: undefined, // TODO: rename to "output"
+  closeChan: true, // TODO: rename to "closeOutput"
   bufferSize: 0,
   sendRetval: false,
   async: false,
@@ -38,8 +38,8 @@ const FROM_ITERABLE_DEFAULTS = {
 }
 
 const FROM_ITERATOR_DEFAULTS = {
-  chan: undefined,
-  closeChan: true,
+  chan: undefined, // TODO: rename to "output"
+  closeChan: true, // TODO: rename to "closeOutput"
   bufferSize: 0,
   sendRetval: false,
   async: false,
@@ -48,8 +48,8 @@ const FROM_ITERATOR_DEFAULTS = {
 }
 
 const FROM_GENERATOR_DEFAULTS = {
-  chan: undefined,
-  closeChan: true,
+  chan: undefined, // TODO: rename to "output"
+  closeChan: true, // TODO: rename to "closeOutput"
   bufferSize: 0,
   sendRetval: false,
   async: false,
