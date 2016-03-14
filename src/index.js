@@ -33,10 +33,7 @@ const FROM_ITERABLE_DEFAULTS = {
   closeOutput: true,
   bufferSize: 0,
   sendRetval: false,
-  // TODO: change to async: <undefined | true | { runner, getRunnableType }>
-  async: false,
-  asyncRunner: thenableRunner,
-  getAsyncRunnableType: thenableRunner.getRunnableType
+  async: false
 }
 
 const FROM_ITERATOR_DEFAULTS = {
@@ -44,9 +41,7 @@ const FROM_ITERATOR_DEFAULTS = {
   closeOutput: true,
   bufferSize: 0,
   sendRetval: false,
-  async: false,
-  asyncRunner: thenableRunner,
-  getAsyncRunnableType: thenableRunner.getRunnableType
+  async: false
 }
 
 const FROM_GENERATOR_DEFAULTS = {
@@ -54,9 +49,17 @@ const FROM_GENERATOR_DEFAULTS = {
   closeOutput: true,
   bufferSize: 0,
   sendRetval: false,
-  async: false,
-  asyncRunner: thenableRunner,
-  getAsyncRunnableType: thenableRunner.getRunnableType
+  async: false
+}
+
+const ASYNC_DEFAULTS = {
+  runner: thenableRunner,
+  getRunnableType: thenableRunner.getRunnableType
+}
+
+const ASYNC_OFF = {
+  runner: undefined,
+  getRunnableType: undefined
 }
 
 
@@ -130,6 +133,14 @@ class ChanBase {
     return fromIteratorWithOpts(gen, opts, FROM_GENERATOR_DEFAULTS)
   }
 
+  /**
+   * Sets the object that replaces opts.async === true in
+   * fromIterable, fromIterator and fromGenerator.
+   */
+  static setAsyncDefaults(opts) {
+    extend(ASYNC_DEFAULTS, opts)
+  }
+
   take() {
     let promise = thenablePool.take()
     let reuseId = promise._reuseId
@@ -195,16 +206,15 @@ ChanBase.fromGenerator.setDefaults = (opts) => { extend(FROM_GENERATOR_DEFAULTS,
 
 function fromIteratorWithOpts(iter, opts, defaults) {
   opts = opts || defaults
-  let asyncRunner, getAsyncRunnableType
-  if (defaultTo(defaults.async, opts.async)) {
-    asyncRunner = defaultTo(defaults.asyncRunner, opts.asyncRunner),
-    getAsyncRunnableType = defaultTo(defaults.getAsyncRunnableType, opts.getAsyncRunnableType)
-  }
+  let async = defaultTo(defaults.async, opts.async)
   return fromIterator(iter,
     createChanIfUndefined(opts.output, opts.bufferSize, defaults.bufferSize),
     defaultTo(defaults.closeOutput, opts.closeOutput),
     defaultTo(defaults.sendRetval, opts.sendRetval),
-    asyncRunner, getAsyncRunnableType
+    async ? async === true ? ASYNC_DEFAULTS : {
+      runner: defaultTo(ASYNC_DEFAULTS.runner, async.runner),
+      getRunnableType: defaultTo(ASYNC_DEFAULTS.getRunnableType, async.getRunnableType)
+    } : ASYNC_OFF
   )
 }
 

@@ -412,9 +412,7 @@ var ch = chan.fromIterable('abc', {
   closeOutput: true, // close the output channel when the iterator is exhausted
   bufferSize: 0, // what buffer size to use when creating output channel
   sendRetval: false, // whether to send the last value of iterator (when state.done == true)
-  async: false, // allow async iteration (see next section for this and the rest of options)
-  asyncRunner: thenableRunner,
-  getAsyncRunnableType: thenableRunner.getRunnableType
+  async: false // allow async iteration (see next section for details)
 })
 ```
 
@@ -508,7 +506,7 @@ let ch = new chan()
 asyncFn(chan).then(result => console.log(result))
 ```
 
-Another option is to use `chan.fromGenerator()` with `opts.async` set to `true`:
+Another option is to use `chan.fromGenerator()` with `async` option set to `true`:
 
 ```js
 function* $asyncGenerator() {
@@ -527,23 +525,43 @@ in an `async` function. But if you `yield` a non-Promise value, it will be sent 
 the resulting channel, and the execution of the function will resume after the
 sent value is either buffered or consumed.
 
-There are three async-related options that you can specify (among others) in the
-second "options" argument of `chan.fromGenerator()`: `async`, `asyncRunner` and
-`getAsyncRunnableType`. The first one, `async`, is a flag that turns the async
-functionality on or off (off by default).
+Instead of `true`, you can pass an object of the following shape:
 
-The remaining two options allow you to support async runnables other than Promises.
-The `getAsyncRunnableType(value)` function is called each time a generator yields
-some value, which is passed into the only argument of that function. If it returns
-`undefined` or `null`, then the value is considered a usual value and gets sent
-into a channel. Otherwise, the value is considered a runnable.
+```js
+{
+  getRunnableType: (value: any) -> (null | any),
+  runner: (value: any, type: any) -> (Promise | any)
+}
+```
 
-In that case, the `asyncRunner(value, type)` is called, with the runnable passed to
-the first argument, and the type returned from `getAsyncRunnableType(value)` to
-the second. If this function returns a non-Promise value or throws an error, the
-returned value/error is sent back into the generator immediately. Otherwise, the
-returned Promise is awaited, and the resulting value/error is sent into the generator
-when that Promise settles.
+The `getRunnableType(value)` function is called each time a generator yields some value,
+which is passed into the only argument of that function. If it returns `undefined` or
+`null`, then the `value` is considered a usual value and gets sent into a channel.
+Otherwise, the `value` is considered a runnable.
+
+In that case, the `runner(value, type)` function is called, with the runnable passed to
+the first argument, and the type returned from `getRunnableType(value)` to the second,
+and its return value is inspected. If this function returns a non-Promise value or throws
+an error, the returned value or error is sent back into the generator immediately. Otherwise,
+the returned Promise is awaited on, and the resulting value/error is sent back into the
+generator when that Promise settles.
+
+The `async` option is also supported by `chan.fromIterator()` and `chan.fromIterable()`
+functions.
+
+When you pass `async: true`, it gets replaced with the default async options described above,
+i.e. `runner` and `getRunnableType` that are designed to run Promises. You can change these
+defaults with `chan.setAsyncDefaults(asyncOpts)` function:
+
+```js
+chan.setAsyncDefaults({
+  getRunnableType: myGetRunnableType,
+  runner: myRunner
+})
+```
+
+This setting will affects all future calls of `chan.fromIterable()`, `chan.fromIterator()`
+and `chan.fromGenerator()` in which `opts.async` is set to true.
 
 > **Example**: [async-await](_examples/async-await/9-async-generator.js).
 

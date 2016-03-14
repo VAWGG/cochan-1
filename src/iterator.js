@@ -12,7 +12,7 @@ thenableRunner.getRunnableType = function thenableRunner$getRunnableType(obj) {
 }
 
 
-export function fromIterator(iter, chan, closeChan, sendRetval, runner, getRunnableType) {
+export function fromIterator(iter, chan, closeChan, sendRetval, { runner, getRunnableType }) {
   let done = false
   next(undefined, false)
   return chan
