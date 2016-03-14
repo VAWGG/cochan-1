@@ -14,5 +14,6 @@ export const thenablePool = new Pool({
   initialCapacity: 5,
   maxCapacity: 100,
   makeNew: () => new Thenable(undefined, 0),
-  reset: (th) => { th._reuse() }
+  reset: (th) => { th._reuse() },
+  prepare: (th) => { th._unseal() }
 })

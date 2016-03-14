@@ -69,10 +69,10 @@ export class Thenable {
   }
 
   _reuse() {
-    // _op = 0, non-sealed, ++_reuseId (mod 2^28)
-    let newState = (this._state & ~0b111) + 0b1000
-    // 2147483640 == (2^28 - 1) << 3 == 0b111...11000 (28 1s and 3 0s)
-    this._state = newState > 2147483640 ? 0 : newState
+    // _op = 0, sealed, ++_reuseId (mod 2^28)
+    let newState = (this._state & ~0b111) + 0b1100
+    // 2147483640 == (2^28 - 1) << 3 == 0b111...11000 (1x28 and 0x3)
+    this._state = newState > 2147483640 ? 0b100 : newState
     this._chan = undefined
     let subs = this._subs; if (subs) {
       if (subs instanceof Array) {
@@ -100,6 +100,10 @@ export class Thenable {
 
   _seal() {
     this._state |= 0b100
+  }
+
+  _unseal() {
+    this._state &= ~0b100
   }
 
   _addSub(newSub /* = { onFulfilled, onRejected } */) {

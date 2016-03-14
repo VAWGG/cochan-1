@@ -2,9 +2,15 @@ const EMPTY = {}
 
 export default class Pool {
 
-  constructor({ makeNew, reset, initialCapacity = 10, maxCapacity = 100, name = 'pool' }) {
+  constructor({ makeNew, reset,
+    prepare = undefined,
+    initialCapacity = 10,
+    maxCapacity = 100,
+    name = 'pool'
+  }){
     this._makeNew = makeNew
     this._reset = reset
+    this._prepare = prepare
     this._items = []
     this._items.length = initialCapacity
     this._len = 0
@@ -23,6 +29,9 @@ export default class Pool {
         this.registeredMaxSize = i
       }
       // console.log(`pool<${this.name}>.take(), len: ${i}`)
+      if (this._prepare) {
+        this._prepare(item)
+      }
       return item
     } else {
       return this._makeNew()
