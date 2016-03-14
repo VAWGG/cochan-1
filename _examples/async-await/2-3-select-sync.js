@@ -1,5 +1,5 @@
 import chan from '../../src'
-import {p, sleep} from '../utils'
+import {p} from '../utils'
 
 async function worker(chIn, chOut) {
   let i = 1; while (true) {
@@ -29,7 +29,7 @@ function run() {
     chA.sendSync(item)
   }
 
-  worker(chA, chB)
+  worker(chA, chB).catch(p)
 }
 
 run()
