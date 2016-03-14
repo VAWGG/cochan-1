@@ -134,6 +134,11 @@ class ChanBase {
     return promise
   }
 
+  named(name) {
+    this.name = name
+    return this
+  }
+
   toString() {
     let desc = this.name == undefined
       ? `${ this._constructorName }(${ describeArray(this._constructorArgsDesc) })`
