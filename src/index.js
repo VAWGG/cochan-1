@@ -9,7 +9,7 @@ import {fromIterator, thenableRunner} from './iterator'
 import {ISCHAN, CLOSED, OP_TAKE} from './constants'
 import {mixin, describeArray, describeValue, defaultTo, extend, nop} from './utils'
 import {isIterator, isGenerator, isGeneratorFunction} from './utils'
-import scheduler from './scheduler'
+import schedule from './schedule'
 
 module.exports = Chan
 export default Chan
@@ -64,8 +64,9 @@ class ChanBase {
     return obj && obj._ischan === ISCHAN
   }
 
-  static setScheduler(fn) {
-    scheduler.schedule = fn
+  static setScheduler({ microtask, macrotask }) {
+    schedule.microtask = microtask || schedule.microtask
+    schedule.macrotask = macrotask || schedule.macrotask
   }
 
   static timeout(ms, message) {

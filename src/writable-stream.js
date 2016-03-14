@@ -1,5 +1,5 @@
 import assert from 'power-assert'
-import {nextTick} from './utils'
+import schedule from './schedule'
 import {P_RESOLVED} from './constants'
 
 class WritableStreamMixin {
@@ -11,7 +11,7 @@ class WritableStreamMixin {
   write(chunk, encoding, cb) {
     if (this.isClosingOrClosed) {
       let err = new Error('attempt to write into a closed channel')
-      nextTick(() => {
+      schedule.microtask(() => {
         cb && cb(err)
         this.emit('error', err)
       })
@@ -23,7 +23,7 @@ class WritableStreamMixin {
       encoding = null
     }
     if (this.sendSync(chunk)) {
-      cb && nextTick(cb)
+      cb && schedule.microtask(cb)
       return true
     }
     let {promise} = this._send(chunk, false, cb, cb, false)
@@ -48,7 +48,7 @@ class WritableStreamMixin {
     if (cb) {
       let promise = this.close()
       if (promise === P_RESOLVED) {
-        nextTick(cb)
+        schedule.microtask(cb)
       } else {
         promise.then(cb)
       }

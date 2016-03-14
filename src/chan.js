@@ -1,5 +1,5 @@
 import assert from 'power-assert'
-import scheduler from './scheduler'
+import schedule from './schedule'
 import {Thenable} from './thenable'
 import {repeat, nop} from './utils'
 import {CLOSED, FAILED, OP_SEND} from './constants'
@@ -101,7 +101,7 @@ export class Chan {
 
     if (waiters) {
       // on next tick, notify all waiters for opportunity to consume
-      scheduler.schedule(() => {
+      schedule.microtask(() => {
         let value = this._state == STATE_CLOSED ? CLOSED : undefined
         this._triggerWaiters(waiters, value, false)
       })
@@ -172,7 +172,7 @@ export class Chan {
     if (item === FAILED) {
       // on next tick, notify all waiters for opportunity to publish
       if (result.waiters) {
-        scheduler.schedule(() => {
+        schedule.microtask(() => {
           if (this._state < STATE_CLOSING) {
             this._triggerWaiters(result.waiters, undefined, false)
             this._needsDrain && this._emitDrain()
@@ -188,7 +188,7 @@ export class Chan {
     item.fnVal && item.fnVal()
     
     if (result.waiters) {
-      scheduler.schedule(() => {
+      schedule.microtask(() => {
         this._triggerWaiters(result.waiters, undefined, false)
         this._needsDrain && this._emitDrain()
       })
