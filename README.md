@@ -346,7 +346,7 @@ channel in various places in the code. That way, all running operations will be 
 the time of a timeout.
 
 > **Examples:**<br>
-> Plain chan.timeout*(: [async-await](_examples/async-await/6-special-chans.js#L56).<br>
+> Plain chan.timeout(): [async-await](_examples/async-await/6-special-chans.js#L56).<br>
 > Select, take + timeout: [async-await](_examples/async-await/2-1-select-take.js).<br>
 > Select, take + send + timeout: [async-await](_examples/async-await/2-4-select-loop.js).
 
@@ -447,7 +447,7 @@ The `sendRetval` option, in the case of generators, defines whether the value pr
 all functions end with a return statement, even if you don't specify it explicitly, in which
 case an implicit `return undefined` will be appended automatically by the JavaScript VM.
 
-> **Examples**:
+> **Examples**:<br>
 > Iterator: [async-await](_examples/async-await/7-iterator.js).<br>
 > Generator: [async-await](_examples/async-await/8-generator.js).
 
