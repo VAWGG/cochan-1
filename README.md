@@ -16,7 +16,7 @@ Supported features:
 * [Channel closing](#closing)
 * Errors (readme TODO)
 * [Synchronous (non-blocking) operations](#synchronous-operations)
-* [Selection from a set of channels](#selection-from-a-set-of-channels)
+* [Selection from a set of operations](#selection-from-a-set-of-operations)
 * [Timeouts](#timeouts)
 * [Merging multiple channels into one](#merging)
 * [Making channels from Promises](#making-a-channel-from-a-promise)
@@ -247,39 +247,85 @@ a high probability.
 
 > **Example**: [async-await](_examples/async-await/3-batch.js).
 
-### Selection from a set of channels
+### Selection from a set of operations
 
-To consume the first value that appears in a set of channels, and find out which
-channel that value came from, use `chan.select(...chans)`:
+The `chan.select(...ops)` function allows to perform the first available send/take operation
+from the provided set, and discard all others. Besides this, it tells you which channel that
+operation was performed on.
+
+For example, to consume the first value that appears in a set of channels, and find out
+which channel that value came from, you can do this:
 
 ```js
-chan.select(ch1, ch2).then(ch => {
+chan.select(ch1.take(), ch2.take()).then(ch => {
   switch(ch) {
-    case ch1: console.log('got value from ch1:', ch1.value); break
-    case ch2: console.log('got value from ch2:', ch2.value); break
+    case ch1: console.log('received a value from ch1:', ch1.value); break
+    case ch2: console.log('received a value from ch2:', ch2.value); break
     case chan.CLOSED: console.log('both ch1 and ch2 are closed'); break
   }
 })
 ```
 
-When several channels have some value, the channel to take the value from
-gets selected randomly.
+Send a value to channel `a`, or receive a value from channel `b`, whichever comes first:
 
-The non-blocking counterpart of `chan.select(...chans)` is `chan.selectSync(...chans)`,
-that either selects a value and returns the channel that the value came from, or returns
-`null` if there are no readily available values/errors in any of the channels, or
-returns `chan.CLOSED` if all non-timeout channels are closed.
+```js
+chan.select(a.send('some value'), b.take()).then(ch => {
+  switch(ch) {
+    case a: console.log('sent a value to a'); break
+    case b: console.log('received a value from b:', ch2.value); break
+    case chan.CLOSED: console.log('nothing was done: both a and b have closed'); break
+  }
+})
+```
 
-> **Example**: [async-await](_examples/async-await/2-select.js).
+> When several operations from the provided set can be performed simultaneously, the
+> operation to perform gets selected randomly.
+
+As a shortcut, for receive operations you can skip the `.take()` call and just pass
+the channel:
+
+```js
+chan.select(ch1, ch2).then(ch => {
+  switch(ch) {
+    case ch1: console.log('received a value from ch1:', ch1.value); break
+    case ch2: console.log('received a value from ch2:', ch2.value); break
+    case chan.CLOSED: console.log('both ch1 and ch2 are closed'); break
+  }
+})
+```
+
+The non-blocking counterpart of `chan.select(...ops)` is `chan.selectSync(...ops)`. It either
+synchronously performs an operation and returns the channel that the operation was performed
+on, or returns `null` if there are no operations in the provided set that can be performed
+synchronously, or returns `chan.CLOSED` if all non-timeout channels are closed.
+
+> Note the difference from [golang selec operation], where receive operations proceed as soon
+> the corresponding channel has closed. In contrast, `chan.select()` doesn't treat receive
+> operations on closed channels as able to proceed, despite the fact that such operations
+> outside of `chan.take()` can proceed immediately, yielding `chan.CLOSED`. Instead,
+> `chan.select()`, if needed, blocks until some other operation become available. Only when
+> all passed channels are closed, it returns `chan.CLOSED`. This behavior may change in future,
+> but for now it seems to be more useful than the golang's one.
+
+[golang selec operation]: https://golang.org/ref/spec#Select_statements
+
+> **Examples:**<br>
+> Set of take operations: [async-await](_examples/async-await/2-1-select-take.js).<br>
+> Set of take and send operations: [async-await](_examples/async-await/2-2-select.js).<br>
+> Synchronous select: [async-await](_examples/async-await/2-3-select-sync.js).<br>
+> Send/receive with piped channels: [async-await](_examples/async-await/2-4-select-loop.js).
 
 ### Timeouts
 
-To add a configurable timeout to receive operation, use `chan.timeout(ms[, msg])` in
-combination with `chan.select(...chans)`:
+To create a timeout channel, use `chan.timeout(ms[, msg])`. The created channel can be used
+in combination with [`chan.select(...ops)`] to add a configurable timeout to some send/receive
+operation or a set of operations:
+
+[`chan.select(...ops)`]: #selection-from-a-set-of-operations
 
 ```js
 var chTimeout = chan.timeout(5000) // to pass optional message, use second arg
-chan.select(ch1, ch2, chTimeout).then(ch => {
+chan.select(ch1, chTimeout).then(ch => {
   switch(ch) {
     case ch1: console.log('got value from ch1:', ch1.value); break
     case ch2: console.log('got value from ch2:', ch2.value); break
@@ -288,14 +334,22 @@ chan.select(ch1, ch2, chTimeout).then(ch => {
 }).catch(err => console.log(err)) // will go here on timeout
 ```
 
-In fact, timeout channels are very special. Once the timeout is reached, they
-start returning errors to all consumers, both current and future. This allows
-you to define the single timeout channel for some long-running complex operation,
-and then use that channel in various places in the code. That way, all running
-operations will be interrupted at the time of a timeout.
+If none of the other operations inside `select()` statement are able to complete before the
+timeout, the Promise returned from `select()` call gets rejected with timeout error. Similarly,
+the `selectSync()` call will throw if one of its operations is a take from a timeout channel
+which timeout has already passed.
 
-> **Selection example**: [async-await](_examples/async-await/2-select.js).<br>
-> **chan.timeout example**: [async-await](_examples/async-await/6-special-chans.js).
+In fact, timeout channels are very special. Once the timeout is reached, they return an error
+to all current consumers, and keep returning errors to any future consumers. This allows you to
+define the single timeout channel for some long-running complex operation, and then use that
+channel in various places in the code. That way, all running operations will be interrupted at
+the time of a timeout.
+
+> **Examples:**<br>
+> Plain chan.timeout: [async-await](_examples/async-await/6-special-chans.js).<br>
+> Select, take + timeout: [async-await](_examples/async-await/2-1-select-take.js).<br>
+> Select, take + send + timeout: [async-await](_examples/async-await/2-4-select-loop.js).
+
 
 ### Merging
 
@@ -304,9 +358,9 @@ that resulting channel when all source channels has closed. The `chan.merge(...c
 helper function does exactly this, respecting backpressure generated by the output
 channel.
 
-This is somewhat similar to `select(...chans)`, but differs in that you are not
-interested from which channel each output value came from, and you get a channel
-instead of one-time receive operation.
+This is somewhat similar to `chan.select(...chansOrTakeOps)`, but differs in that
+you are not interested from which channel each output value came from, and you get
+a channel instead of performing one-time receive operation.
 
 ```js
 var chMerged = chan.merge(ch1, ch2, ch3)

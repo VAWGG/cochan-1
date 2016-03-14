@@ -2,6 +2,7 @@ import {Chan} from './chan'
 import {SpecialChan, TimeoutChan, DelayChan, PromiseChan} from './special-chans'
 import {EventEmitterMixin} from './event-emitter'
 import {Thenable} from './thenable'
+import {thenablePool} from './pools'
 import {select, selectSync} from './select'
 import {ChanWritableStreamMixin} from './writable-stream'
 import {mergeTo} from './merge'
@@ -129,8 +130,21 @@ class ChanBase {
   }
 
   take() {
-    let promise = new Thenable(this, OP_TAKE)
-    promise._cancel = this._take(promise._fulfillBound, promise._rejectBound, true)
+    let promise = thenablePool.take()
+    let reuseId = promise._reuseId
+    promise._chan = this
+    promise._op = OP_TAKE
+    schedule.microtask(() => {
+      if (promise._reuseId == reuseId) {
+        let bound = promise._bound
+        let cancel = this._take(bound.fulfill, bound.reject, true)
+        // the previous line might have already cancelled this promise
+        // and put it into the reuse pool, so we need to check
+        if (promise._reuseId == reuseId) {
+          promise._cancel = cancel
+        }
+      }
+    })
     return promise
   }
 

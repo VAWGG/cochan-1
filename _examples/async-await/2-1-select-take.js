@@ -1,8 +1,9 @@
 import chan from '../../src'
-import {p} from '../utils'
+import {p, sleep} from '../utils'
 
 async function producer(name, ch, items) {
   for (let item of items) {
+    // await sleep(500) // uncomment to trigger a timeout
     p(`${ name }-> sending item: ${ item }...`)
     await ch.send(item)
     p(`${ name }-> done sending item: ${ item }`)
@@ -38,6 +39,6 @@ ch1.name = 'chan 1'
 ch2.name = 'chan 2'
 
 producer('1', ch1, [ 'a', 'b' ]).catch(p)
-producer('2', ch2, [ '1', '2' ]).catch(p)
+producer('2', ch2, [ 'X', 'Y' ]).catch(p)
 
 consumer(ch1, ch2).catch(p)

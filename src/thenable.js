@@ -1,4 +1,8 @@
-import {nop} from './utils'
+import {OP_TAKE, OP_SEND, THENABLE_INVALID_USE_MSG} from './constants'
+import {arrayPool} from './pools'
+
+const DEBUG = true
+let nextId = 0|0
 
 export class Thenable {
 
@@ -15,16 +19,17 @@ export class Thenable {
   }
 
   constructor(chan, op) {
+    if (DEBUG) {
+      this._id = ++nextId
+    }
     this._chan = chan
-    this._op = op
-    this._cancel = nop
-    this._subs = undefined
-    this._result = undefined
-    this._fulfill_bnd = undefined
-    this._reject_bnd = undefined
+    this._state = op|0 // _op = op, non-sealed, _reuseId = 0
   }
 
   then(onFulfilled, onRejected) {
+    if (this._isSealed) {
+      throw new Error(THENABLE_INVALID_USE_MSG)
+    }
     return new Promise((resolve, reject) => {
       let result = this._result
       if (result) {
@@ -39,22 +44,75 @@ export class Thenable {
         }
         return
       }
-      let subs = this._subs, newSub = {
+      this._addSub({
         onFulfilled: onFulfilled ? wrapHandler(onFulfilled, resolve, reject) : resolve,
         onRejected: onRejected ? wrapHandler(onRejected, resolve, reject) : reject
-      }
-      if (!subs) {
-        this._subs = newSub
-      } else if (subs.constructor === Object) {
-        this._subs = [ subs, newSub ]
-      } else {
-        subs.push(newSub)
-      }
+      })
     })
   }
 
   catch(onRejected) {
     return this.then(undefined, onRejected)
+  }
+
+  get _op() {
+    return this._state & 0b11
+  }
+
+  set _op(op) {
+    this._state = (this._state & ~0b11) | op
+  }
+
+  get _reuseId() {
+    // max: 2^28 - 1 = 268435455
+    return this._state >> 3
+  }
+
+  _reuse() {
+    // _op = 0, non-sealed, ++_reuseId (mod 2^28)
+    let newState = (this._state & ~0b111) + 0b1000
+    // 2147483640 == (2^28 - 1) << 3 == 0b111...11000 (28 1s and 3 0s)
+    this._state = newState > 2147483640 ? 0 : newState
+    this._chan = undefined
+    let subs = this._subs; if (subs) {
+      if (subs instanceof Array) {
+        arrayPool.put(subs)
+      }
+      this._subs = undefined
+    }
+    if (this._cancel) {
+      this._cancel = undefined
+    }
+    if (this._result) {
+      this._result = undefined
+    }
+    if (this._sendData) {
+      this._sendData = undefined
+    }
+    if (DEBUG) {
+      this._id = ++nextId
+    }
+  }
+
+  get _isSealed() {
+    return this._state & 0b100
+  }
+
+  _seal() {
+    this._state |= 0b100
+  }
+
+  _addSub(newSub /* = { onFulfilled, onRejected } */) {
+    let subs = this._subs
+    if (!subs) {
+      this._subs = newSub
+    } else if (subs.constructor === Object) {
+      this._subs = arrayPool.take()
+      this._subs.push(subs)
+      this._subs.push(newSub)
+    } else {
+      subs.push(newSub)
+    }
   }
 
   _fulfill(value) {
@@ -71,6 +129,7 @@ export class Thenable {
     for (let i = 0, l = subs.length; i < l; ++i) {
       subs[i].onFulfilled(value)
     }
+    arrayPool.put(subs)
     return this
   }
 
@@ -88,23 +147,36 @@ export class Thenable {
     for (let i = 0, l = subs.length; i < l; ++i) {
       subs[i].onRejected(value)
     }
+    arrayPool.put(subs)
     return this
   }
 
-  get _fulfillBound() {
-    return this._fulfill_bnd || (this._fulfill_bnd = val => {
-      this._fulfill_bnd = undefined
-      this._reject_bnd = undefined
-      this._fulfill(val)
+  get _bound() {
+    return this._bound_ || (this._bound_ = {
+      fulfill: (val) => {
+        this._bound_ = undefined
+        this._fulfill(val)
+      },
+      reject: (err) => {
+        this._bound_ = undefined
+        this._reject(err)
+      }
     })
   }
 
-  get _rejectBound() {
-    return this._reject_bnd || (this._reject_bnd = err => {
-      this._fulfill_bnd = undefined
-      this._reject_bnd = undefined
-      this._reject(err)
-    })
+  toString() {
+    return `Thenable(${ DEBUG ? this._id + ', ' : ''
+      }chan = ${ this._chan || '<no>'
+      }, op = ${ this._op == OP_TAKE ? 'take' :
+         this._op == OP_SEND ? 'send ' + describeBox(this._sendData) : '<no>'
+      }, result = ${ this._result ? describeBox(this._result) : '<no>'
+      }, rid = ${ this._reuseId
+      }, seal = ${ this._isSealed ? 1 : 0
+      })`
+  }
+
+  inspect() {
+    return this.toString()
   }
 }
 
@@ -117,3 +189,14 @@ function wrapHandler(handler, resolve, reject) {
     }
   }
 }
+
+function describeBox(pair) {
+  return pair
+    ? pair.isError ? `Error(${pair.value})` : `Value(${pair.value})`
+    : '<no>'
+}
+
+Thenable.prototype._cancel = undefined
+Thenable.prototype._subs = undefined
+Thenable.prototype._result = undefined
+Thenable.prototype._bound_ = undefined

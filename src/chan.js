@@ -1,6 +1,7 @@
 import assert from 'power-assert'
 import schedule from './schedule'
 import {Thenable} from './thenable'
+import {thenablePool} from './pools'
 import {repeat, nop} from './utils'
 import {CLOSED, FAILED, OP_SEND} from './constants'
 import {P_RESOLVED, P_RESOLVED_WITH_FALSE, P_RESOLVED_WITH_TRUE} from './constants'
@@ -28,7 +29,6 @@ export class Chan {
     this._buffer = []
     this._totalWaiters = 0
     this._value = undefined
-    this._nextPromise()
   }
 
   get value() {
@@ -76,6 +76,8 @@ export class Chan {
   }
 
   sendSync(val, isError) {
+    // console.log(`    ${this}.sendSync(${val}, ${!!isError})`)
+
     if (this._state >= STATE_CLOSING) {
       return false
     }
@@ -111,51 +113,63 @@ export class Chan {
   }
 
   send(value, isError) {
-    let promise = this._promise
-    let state = this._send(value, isError, promise._fulfillBound, promise._rejectBound, true)
-    if (state.promise) {
-      return state.promise
-    }
+    let promise = thenablePool.take()
+    let reuseId = promise._reuseId
+    promise._chan = this
     promise._op = OP_SEND
-    promise._cancel = state.cancel
-    this._nextPromise()
+    promise._sendData = { value, isError }
+    schedule.microtask(() => {
+      if (promise._reuseId == reuseId) {
+        let bound = promise._bound
+        let cancel = this._send(value, isError, bound.fulfill, bound.reject, true)
+        // the previous line might have already cancelled this promise
+        // and put it into the reuse pool, so we need to check
+        if (promise._reuseId == reuseId) {
+          promise._cancel = cancel
+        }
+      }
+    })
     return promise
   }
 
   _send(val, isError, fnOk, fnErr, needsCancelFn) {
+    // console.log(`    ${this}._send(${val}, ${!!isError})`)
+
     if (this._state >= STATE_CLOSING) {
-      return {
-        promise: Thenable.reject(new Error('attempt to send into a closed channel'), this, OP_SEND),
-        cancel: nop
-      }
+      fnErr(new Error('attempt to send into a closed channel'))
+      return nop
     }
 
     let waiters
     if (this._state == STATE_WAITING_FOR_PUBLISHER) {
       waiters = this._sendToWaitingConsumer(val, isError)
       if (waiters === SUCCESS) { // value was consumed
-        return { promise: this._pSendResolved, cancel: nop }
+        fnOk(undefined)
+        return nop
       }
     }
 
     assert(this._state == STATE_NORMAL)
     assert(this._buffer.length - this._totalWaiters >= 0)
 
-    let promise = undefined
+    let item
 
     if (this._buffer.length - this._totalWaiters < this._bufferSize) {
-      fnOk = undefined
-      fnErr = undefined
-      promise = this._pSendResolved
+      this._buffer.push(item = { val, type: isError ? TYPE_ERROR : TYPE_VALUE,
+        fnVal: undefined, fnErr: undefined })
+      fnOk(undefined)
+    } else {
+      this._buffer.push(item = { val, type: isError ? TYPE_ERROR : TYPE_VALUE,
+        fnVal: fnOk, fnErr: fnErr })
     }
 
-    this._buffer.push({ val, type: isError ? TYPE_ERROR : TYPE_VALUE, fnVal: fnOk, fnErr })
     waiters && this._triggerWaiters(waiters, val, isError)
-
-    return { promise, cancel: needsCancelFn ? () => { item.type = TYPE_CANCELLED } : nop }
+    return needsCancelFn ? () => { item.type = TYPE_CANCELLED } : nop
   }
 
   takeSync() {
+    // console.log(`    ${this}.takeSync()`)
+
     if (this._state == STATE_CLOSED) {
       return false
     }
@@ -185,6 +199,9 @@ export class Chan {
       return false
     }
 
+    let type = item.type
+    assert(type == TYPE_VALUE || type == TYPE_ERROR)
+
     item.fnVal && item.fnVal()
     
     if (result.waiters) {
@@ -194,15 +211,17 @@ export class Chan {
       })
     }
 
-    if (item.type == TYPE_ERROR) {
+    if (type == TYPE_ERROR) {
       throw item.val
     }
 
-    assert(item.type == TYPE_VALUE)
+    assert(type == TYPE_VALUE)
     return true
   }
 
   _take(fnVal, fnErr, needsCancelFn) {
+    // console.log(`    ${this}._take()`)
+
     if (this._state == STATE_CLOSED) {
       fnVal && fnVal(CLOSED)
       return nop
@@ -214,11 +233,11 @@ export class Chan {
       let result = this._takeFromWaitingPublisher()
       let {item} = result
       if (item !== FAILED) {
-        item.fnVal && item.fnVal()
         assert(item.type == TYPE_VALUE || item.type == TYPE_ERROR)
         let fn = item.type == TYPE_VALUE ? fnVal : fnErr
+        item.fnVal && item.fnVal() // this may change item.type to TYPE_CANCELLED
         fn && fn(item.val)
-        item.waiters && this._triggerWaiters(item.waiters)
+        result.waiters && this._triggerWaiters(result.waiters)
         this._needsDrain && this._emitDrain()
         return nop
       }
@@ -510,18 +529,6 @@ export class Chan {
     if (triggerError) {
       this.trigger('error', err)
     }
-  }
-
-  _nextPromise() {
-    let promise = this._promise
-    this._promise = new Thenable(this, 100)
-    return promise
-  }
-
-  get _pSendResolved() {
-    return this._pSendResolved_ || (
-      this._pSendResolved_ = Thenable.resolve(undefined, this, OP_SEND)
-    )
   }
 
   get _constructorName() {
