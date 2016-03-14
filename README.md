@@ -1,7 +1,7 @@
 # cochan
 
 [![NPM package version][npm-image]][npm-url]
-![Dependencies][dependencies-image]
+[![Dependencies][deps-image]][deps-url]
 [![NPM Downloads][downloads-image]][downloads-url]
 
 Channel communication primitive, modelled after [golang channels]. Useful for
@@ -591,4 +591,5 @@ ends, it will end (close) the channel too. This is a standard Streams behavior.
 [npm-url]: https://npmjs.org/package/cochan
 [downloads-image]: http://img.shields.io/npm/dm/cochan.svg?style=flat-square
 [downloads-url]: https://npmjs.org/package/cochan
-[dependencies-image]: https://www.versioneye.com/nodejs/cochan/badge.svg?style=flat
+[deps-image]: https://www.versioneye.com/nodejs/cochan/badge.svg?style=flat
+[deps-url]: https://www.versioneye.com/nodejs/cochan/
