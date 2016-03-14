@@ -33,6 +33,7 @@ const FROM_ITERABLE_DEFAULTS = {
   closeChan: true, // TODO: rename to "closeOutput"
   bufferSize: 0,
   sendRetval: false,
+  // TODO: change to async: <undefined | true | { runner, getRunnableType }>
   async: false,
   asyncRunner: thenableRunner,
   getAsyncRunnableType: thenableRunner.getRunnableType
