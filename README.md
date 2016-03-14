@@ -453,14 +453,17 @@ case an implicit `return undefined` will be appended automatically by the JavaSc
 
 ### Async generators
 
-Converting a generator into a channel is cool, but generators have one limitation:
-they are synchronous. Some libraries, like `co`, allow to turn them into an
-`async`-like functions, with `yield` meaning the same as `await`:
+Converting a generator into a channel is cool, but generators have one limitation: they are
+synchronous. This means that you can't get some Promise, wait until it resolves, and only
+then send the result into a channel.
+
+Some libraries, like `co`, allow to turn generators into an `async`-like functions, with
+`yield` meaning the same as `await`:
 
 ```js
 function* $asyncGenerator() {
-  let result1 = yield somethingThatReturnsAPromise()
-  let result2 = yield somethingThatReturnsAPromise()
+  let result1 = yield promiseReturningX()
+  let result2 = yield promiseReturningY()
   return result1 + result2
 }
 
@@ -468,23 +471,23 @@ let promise = co($asyncGenerator())
 promise.then(result => console.log('result:', result))
 ```
 
-But then you lose the ability to use `yield` for sending a value to a channel,
-because `yield` now means "await a Promise" and, moreover, you cannot pass
-the resulting thing into `fromGenerator`, like this:
+But then you lose the ability to use `yield` for sending a value into a channel,
+because `yield` now means "await a Promise" and, moreover, you cannot pass the
+resulting thing into `chan.fromGenerator()`, like this:
 
 ```js
 let ch = chan.fromGenerator(co($asyncGenerator))
 ```
 
-That's because `co($asyncGenerator)` returns a Promise, and `chan.fromGenerator()`
+That's because `co($asyncGenerator)` returns a `Promise`, and `chan.fromGenerator()`
 expects a generator. One possible solution is to forget about `chan.fromGenerator()`,
-and use `chan.send()` to send values to the channel:
+and just use `chan.send()` to send values into the channel:
 
 ```js
 function* $asyncGenerator(ch) {
-  let result1 = yield smthThatReturnsPromise()
+  let result1 = yield promiseReturningX()
   yield ch.send(result1)
-  let result2 = yield smthThatReturnsPromise()
+  let result2 = yield promiseReturningY()
   yield ch.send(result2)
 }
 
@@ -506,26 +509,25 @@ let ch = new chan()
 asyncFn(chan).then(result => console.log(result))
 ```
 
-Another option is to use `chan.fromGenerator()` with `async` option set to `true`:
+But there is another option: use `chan.fromGenerator()` with `async` option set to `true`.
 
 ```js
 function* $asyncGenerator() {
-  let result1 = yield smthThatReturnsPromise()
-  yield result1
-  let result2 = yield smthThatReturnsPromise()
-  yield result2
+  let result1 = yield smthThatReturnsPromise() // behaves like await
+  yield result1 // behaves like send()
+  let result2 = yield smthThatReturnsPromise() // behaves like await
+  yield result2 // behaves like send()
 }
 
 let ch = chan.fromGenerator($asyncGenerator, { async: true })
 ```
 
-It works as follows: if you `yield` a Promise, then this promise will be awaited
-and the result returned back into the function, just like with the `await` keyword
-in an `async` function. But if you `yield` a non-Promise value, it will be sent into
-the resulting channel, and the execution of the function will resume after the
-sent value is either buffered or consumed.
+It works as follows: when you `yield` a `Promise`, then this promise is awaited and the result
+returned back into the function, just like with the `await` keyword in an `async` function.
+But if you `yield` a non-`Promise` value, it will be sent into the resulting channel, and the
+execution of the function will be resumed after the sent value is either buffered or consumed.
 
-Instead of `true`, you can pass an object of the following shape:
+Instead of `true`, you can pass to `opts.async` an object of the following shape:
 
 ```js
 {
@@ -542,7 +544,8 @@ Otherwise, the `value` is considered a runnable.
 In that case, the `runner(value, type)` function is called, with the runnable passed to
 the first argument, and the type returned from `getRunnableType(value)` to the second,
 and its return value is inspected. If this function returns a non-Promise value or throws
-an error, the returned value or error is sent back into the generator immediately. Otherwise,
+an error, the returned value or error is sent back into the generator immediately, i.e.
+the value is returned (and the error is thrown) from the `yield` operation. Otherwise,
 the returned Promise is awaited on, and the resulting value/error is sent back into the
 generator when that Promise settles.
 
@@ -560,8 +563,8 @@ chan.setAsyncDefaults({
 })
 ```
 
-This setting will affects all future calls of `chan.fromIterable()`, `chan.fromIterator()`
-and `chan.fromGenerator()` in which `opts.async` is set to true.
+This setting will affect all future calls of `chan.fromIterable()`, `chan.fromIterator()`
+and `chan.fromGenerator()` in which `opts.async` is set to `true`.
 
 > **Example**: [async-await](_examples/async-await/9-async-generator.js).
 
