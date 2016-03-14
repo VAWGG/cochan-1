@@ -9,7 +9,7 @@ import {p, sleep} from '../utils'
 async function pipe(src, dst) {
   let running = true; while (running) {
     let value = await src.take()
-    if (value === chan.CLOSED || dst.isClosingOrClosed) {
+    if (value === chan.CLOSED || !dst.isActive) {
       running = false
     } else {
       await dst.send(value)

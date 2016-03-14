@@ -166,7 +166,7 @@ export function select(/* ...chans */) {
   // to the caller, even if there are other non-closed channels?
 
   function onSendError(err, chan) {
-    if (chan.isClosingOrClosed) {
+    if (!chan.isActive) {
       if (++numClosed >= subs.length) {
         unsub()
         fnVal(CLOSED)

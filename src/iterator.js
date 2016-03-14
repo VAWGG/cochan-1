@@ -18,7 +18,7 @@ export function fromIterator(iter, chan, closeChan, sendRetval, { runner, getRun
   return chan
 
   function next(valueToSend, valueToSendIsError) {
-    if (chan.isClosingOrClosed) {
+    if (!chan.isActive) {
       return end()
     }
     if (done) {

@@ -35,7 +35,16 @@ export class Chan {
     return this._value
   }
 
+  get isActive() {
+    return this._state < STATE_CLOSING
+  }
+
+  get isClosed() {
+    return this._state == STATE_CLOSED
+  }
+
   get canSend() {
+    // the same as isActive
     return this._state < STATE_CLOSING
   }
 
@@ -53,14 +62,6 @@ export class Chan {
     assert(this._buffer.length - this._totalWaiters >= 0)
     return this._state != STATE_WAITING_FOR_PUBLISHER
         && this._buffer.length - this._totalWaiters > 0
-  }
-
-  get isClosingOrClosed() {
-    return this._state >= STATE_CLOSING
-  }
-
-  get isClosed() {
-    return this._state == STATE_CLOSED
   }
 
   sendErrorSync(err) {

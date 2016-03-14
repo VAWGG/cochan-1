@@ -169,9 +169,9 @@ class ChanBase {
     let desc = this.name == undefined
       ? `${ this._constructorName }(${ describeArray(this._constructorArgsDesc) })`
       : `${ this._constructorName }<${ this.name }>(${ describeArray(this._constructorArgsDesc) })`
-    return this.isClosingOrClosed
-      ? (this.isClosed ? '[x]' : '[.]') + desc
-      : desc
+    return this.isActive
+      ? desc
+      : (this.isClosed ? '[x]' : '[.]') + desc
   }
 
   inspect() {

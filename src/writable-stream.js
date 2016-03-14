@@ -9,7 +9,7 @@ class WritableStreamMixin {
   }
 
   write(chunk, encoding, cb) {
-    if (this.isClosingOrClosed) {
+    if (!this.isActive) {
       let err = new Error('attempt to write into a closed channel')
       schedule.microtask(() => {
         cb && cb(err)

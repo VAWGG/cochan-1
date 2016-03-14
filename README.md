@@ -116,19 +116,19 @@ var pClosed = ch.close()
 pClosed.then(() => console.log('channel completely closed'))
 ```
 
-After you call `close()`, but before the all items are consumed, the channel
-is in "closing" state. You can check this by accessing `isClosingOrClosed`
-and `isClosed` properties:
+After you call `close()`, but before the all items are consumed, the channel is
+in "closing" state. You can check this by accessing `isActive` and `isClosed`
+properties; `isActive` means "is not closing or closed":
 
 ```js
 ch.send('some value')
-console.log(ch.isClosingOrClosed, ch.isClosed) // false, false
+console.log(ch.isActive, ch.isClosed) // true, false
 
 ch.close()
-console.log(ch.isClosingOrClosed, ch.isClosed) // true, false
+console.log(ch.isActive, ch.isClosed) // false, false
 
 ch.take()
-console.log(ch.isClosingOrClosed, ch.isClosed) // true, true
+console.log(ch.isActive, ch.isClosed) // false, true
 ```
 
 To close a channel immediately, discarding any non-consumed values that are

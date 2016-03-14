@@ -102,8 +102,8 @@ export class TimeoutChan extends SpecialChan { // mixins: DelayChanMixin
     return false
   }
 
-  get isClosingOrClosed() {
-    return false
+  get isActive() {
+    return true
   }
 
   closeSync() {
@@ -195,8 +195,8 @@ class OneTimeChanMixin {
     return this._closed
   }
 
-  get isClosingOrClosed() {
-    return this._closed
+  get isActive() {
+    return !this._closed
   }
 
   get canTakeSync() {
