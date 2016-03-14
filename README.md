@@ -299,15 +299,15 @@ synchronously performs an operation and returns the channel that the operation w
 on, or returns `null` if there are no operations in the provided set that can be performed
 synchronously, or returns `chan.CLOSED` if all non-timeout channels are closed.
 
-> Note the difference from [golang selec operation], where receive operations proceed as soon
-> the corresponding channel has closed. In contrast, `chan.select()` doesn't treat receive
-> operations on closed channels as able to proceed, despite the fact that such operations
-> outside of `chan.take()` can proceed immediately, yielding `chan.CLOSED`. Instead,
-> `chan.select()`, if needed, blocks until some other operation become available. Only when
-> all passed channels are closed, it returns `chan.CLOSED`. This behavior may change in future,
-> but for now it seems to be more useful than the golang's one.
+Note the difference from the [golang select operation], where receive operations proceed as
+soon the corresponding channel has closed. In contrast, `chan.select()` doesn't treat receive
+operations on closed channels as able to proceed, despite the fact that such operations
+outside of `chan.take()` can proceed immediately, yielding `chan.CLOSED`. Instead,
+`chan.select()`, if needed, blocks until some other operation become available. Only when
+all passed channels are closed, it returns `chan.CLOSED`. This behavior may change in future,
+but for now it seems to be more useful than the golang's one.
 
-[golang selec operation]: https://golang.org/ref/spec#Select_statements
+[golang select operation]: https://golang.org/ref/spec#Select_statements
 
 > **Examples:**<br>
 > Set of take operations: [async-await](_examples/async-await/2-1-select-take.js).<br>
@@ -325,7 +325,7 @@ operation or a set of operations:
 
 ```js
 var chTimeout = chan.timeout(5000) // to pass optional message, use second arg
-chan.select(ch1, chTimeout).then(ch => {
+chan.select(ch1, ch2, chTimeout).then(ch => {
   switch(ch) {
     case ch1: console.log('got value from ch1:', ch1.value); break
     case ch2: console.log('got value from ch2:', ch2.value); break
@@ -335,9 +335,9 @@ chan.select(ch1, chTimeout).then(ch => {
 ```
 
 If none of the other operations inside `select()` statement are able to complete before the
-timeout, the Promise returned from `select()` call gets rejected with timeout error. Similarly,
-the `selectSync()` call will throw if one of its operations is a take from a timeout channel
-which timeout has already passed.
+timeout, the Promise returned from `select()` call gets rejected with a timeout error.
+Similarly, the `selectSync()` call will throw if one of its operations is a take from a timeout
+channel which timeout has already passed.
 
 In fact, timeout channels are very special. Once the timeout is reached, they return an error
 to all current consumers, and keep returning errors to any future consumers. This allows you to
@@ -346,7 +346,7 @@ channel in various places in the code. That way, all running operations will be 
 the time of a timeout.
 
 > **Examples:**<br>
-> Plain chan.timeout: [async-await](_examples/async-await/6-special-chans.js).<br>
+> Plain chan.timeout*(: [async-await](_examples/async-await/6-special-chans.js#L56).<br>
 > Select, take + timeout: [async-await](_examples/async-await/2-1-select-take.js).<br>
 > Select, take + send + timeout: [async-await](_examples/async-await/2-4-select-loop.js).
 
@@ -371,7 +371,7 @@ options (default values are shown):
 
 ```js
 var chMerged = chan.merge(ch1, ch2, ch3, {
-  // if provided, this channel will be used as the output one, and returned from merge
+  // if provided, this channel will be used as the output one, and returned from the merge call
   dst: undefined,
   // if dst is not provided, what buffer size to specify when creating output channel
   bufferSize: 0,
@@ -391,7 +391,7 @@ channel will produce exactly one value/error and then immediately close.
 var ch = chan.fromPromise(somePromise)
 ```
 
-> **Example**: [async-await](_examples/async-await/6-special-chans.js).
+> **Example**: [async-await](_examples/async-await/6-special-chans.js#L32).
 
 ### Iterables, iterators and generators
 
@@ -412,14 +412,14 @@ var ch = chan.fromIterable('abc', {
   closeChan: true, // close the resulting chan when the iterator is exhausted
   bufferSize: 0, // what buffer size to use when creating new channel (when opts.chan == undefined)
   sendRetval: false, // whether to send the last value of iterator (when state.done == true)
-  async: false, // allow async iteration (see next section for this and next options)
+  async: false, // allow async iteration (see next section for this and the rest of options)
   asyncRunner: thenableRunner,
   getAsyncRunnableType: thenableRunner.getRunnableType
 })
 ```
 
-If you want to make a channel from an already-obtained or custom iterator instead
-of an iterable, use `chan.fromIterator(iter[, opts])`. It supports the same set of
+If you want to make a channel from an already-obtained or custom iterator (instead
+of an iterable), use `chan.fromIterator(iter[, opts])`. It supports the same set of
 options:
 
 ```js
@@ -430,9 +430,8 @@ var myIter = new MyCustomIter()
 var myIterChan = chan.fromIterator(myIter, { sendRetval: true })
 ```
 
-And, finally, you can also make a channel from a generator with
-`chan.fromGenerator(gen[, opts])` function. Again, it supports the same
-options as `chan.fromIterable()` and `chan.fromIterator()`:
+And, finally, you can also make a channel from a generator with `chan.fromGenerator(gen[, opts])`
+function. Again, it supports the same options as `chan.fromIterable()` and `chan.fromIterator()`:
 
 ```js
 function* $generator(x) {
@@ -445,20 +444,20 @@ let genChan = chan.fromGenerator($generator(33), { sendRetval: true })
 // produces 1, 33, 2, and then closes
 ```
 
-The `sendRetval` option, in the case of generators, defines whether the value
-produced with `return` (instead of `yield`) should be sent to the channel. Please
-note that all functions have some return value: if you don't include explicit
-`return` keyword, the implicit `return` of `undefined` will be inserted
-automatically by the JavaScript VM.
+The `sendRetval` option, in the case of generators, defines whether the value produced by
+`return` (instead of `yield`) statement should be sent to the channel. Please note that
+all functions end with a return statement, even if you don't specify it explicitly, in which
+case an implicit `return undefined` will be appended automatically by the JavaScript VM.
 
-> **Iterator example**: [async-await](_examples/async-await/7-iterator.js).<br>
-> **Generator example**: [async-await](_examples/async-await/8-generator.js).
+> **Examples**:
+> Iterator: [async-await](_examples/async-await/7-iterator.js).<br>
+> Generator: [async-await](_examples/async-await/8-generator.js).
 
 ### Async generators
 
-Converting a generator into a channel is cool, but generators have a limitation:
+Converting a generator into a channel is cool, but generators have one limitation:
 they are synchronous. Some libraries, like `co`, allow to turn them into an
-`async`-like functions, with `yield` meaning `await`:
+`async`-like functions, with `yield` meaning the same as `await`:
 
 ```js
 function* $asyncGenerator() {
@@ -495,7 +494,7 @@ let ch = new chan()
 co($asyncGenerator(chan)).then(result => console.log(result))
 ```
 
-In this case, you may as well use async/await instead of generators and `co`:
+But now you may as well use async/await instead of generators and `co`:
 
 ```js
 async function asyncFn(ch) {
@@ -524,7 +523,7 @@ let ch = chan.fromGenerator($asyncGenerator, { async: true })
 
 It works as follows: if you `yield` a Promise, then this promise will be awaited
 and the result returned back into the function, just like with the `await` keyword
-in an async function. But if you `yield` a non-Promise value, it will be sent into
+in an `async` function. But if you `yield` a non-Promise value, it will be sent into
 the resulting channel, and the execution of the function will resume after the
 sent value is either buffered or consumed.
 
