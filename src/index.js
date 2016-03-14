@@ -23,14 +23,14 @@ const iteratorSymbol = 'function' === typeof Symbol
 
 
 const MERGE_DEFAULTS = {
-  dst: undefined, // TODO: rename to "output"
-  closeDst: true, // TODO: rename to "closeOutput"
+  output: undefined,
+  closeOutput: true,
   bufferSize: 0
 }
 
 const FROM_ITERABLE_DEFAULTS = {
-  chan: undefined, // TODO: rename to "output"
-  closeChan: true, // TODO: rename to "closeOutput"
+  output: undefined,
+  closeOutput: true,
   bufferSize: 0,
   sendRetval: false,
   // TODO: change to async: <undefined | true | { runner, getRunnableType }>
@@ -40,8 +40,8 @@ const FROM_ITERABLE_DEFAULTS = {
 }
 
 const FROM_ITERATOR_DEFAULTS = {
-  chan: undefined, // TODO: rename to "output"
-  closeChan: true, // TODO: rename to "closeOutput"
+  output: undefined,
+  closeOutput: true,
   bufferSize: 0,
   sendRetval: false,
   async: false,
@@ -50,8 +50,8 @@ const FROM_ITERATOR_DEFAULTS = {
 }
 
 const FROM_GENERATOR_DEFAULTS = {
-  chan: undefined, // TODO: rename to "output"
-  closeChan: true, // TODO: rename to "closeOutput"
+  output: undefined,
+  closeOutput: true,
   bufferSize: 0,
   sendRetval: false,
   async: false,
@@ -92,9 +92,9 @@ class ChanBase {
       opts = MERGE_DEFAULTS
     }
     return mergeTo(
-      createChanIfUndefined(opts.dst, opts.bufferSize, MERGE_DEFAULTS.bufferSize, 'opts.dst'),
+      createChanIfUndefined(opts.output, opts.bufferSize, MERGE_DEFAULTS.bufferSize),
       chans,
-      opts.closeDst === undefined ? MERGE_DEFAULTS.closeDst : !!opts.closeDst
+      opts.closeOutput === undefined ? MERGE_DEFAULTS.closeOutput : !!opts.closeOutput
     )
   }
 
@@ -201,17 +201,17 @@ function fromIteratorWithOpts(iter, opts, defaults) {
     getAsyncRunnableType = defaultTo(defaults.getAsyncRunnableType, opts.getAsyncRunnableType)
   }
   return fromIterator(iter,
-    createChanIfUndefined(opts.chan, opts.bufferSize, defaults.bufferSize, 'opts.chan'),
-    defaultTo(defaults.closeChan, opts.closeChan),
+    createChanIfUndefined(opts.output, opts.bufferSize, defaults.bufferSize),
+    defaultTo(defaults.closeOutput, opts.closeOutput),
     defaultTo(defaults.sendRetval, opts.sendRetval),
     asyncRunner, getAsyncRunnableType
   )
 }
 
-function createChanIfUndefined(chan, bufferSize, defaultBufferSize, argName) {
+function createChanIfUndefined(chan, bufferSize, defaultBufferSize) {
   if (chan != undefined) {
     if (!Chan.isChan(chan)) throw new TypeError(
-      `${ argName } must be either undefined or a channel; got: ${ describeValue(chan) }`)
+      `opts.output must be either undefined or a channel; got: ${ describeValue(chan) }`)
     return chan
   }
   return new Chan(bufferSize === undefined ? defaultBufferSize : bufferSize)

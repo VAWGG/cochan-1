@@ -372,11 +372,11 @@ options (default values are shown):
 ```js
 var chMerged = chan.merge(ch1, ch2, ch3, {
   // if provided, this channel will be used as the output one, and returned from the merge call
-  dst: undefined,
-  // if dst is not provided, what buffer size to specify when creating output channel
+  output: undefined,
+  // if output is not provided, what buffer size to specify when creating output channel
   bufferSize: 0,
   // whether to close output channel when all input ones have closed
-  closeDst: true
+  closeOutput: true
 })
 ```
 
@@ -408,9 +408,9 @@ argument allows to pass additional options (defaults are shown):
 
 ```js
 var ch = chan.fromIterable('abc', {
-  chan: undefined, // use the passed channel instead of creating a new one
-  closeChan: true, // close the resulting chan when the iterator is exhausted
-  bufferSize: 0, // what buffer size to use when creating new channel (when opts.chan == undefined)
+  output: undefined, // use the passed channel as output, instead of creating a new one
+  closeOutput: true, // close the output channel when the iterator is exhausted
+  bufferSize: 0, // what buffer size to use when creating output channel
   sendRetval: false, // whether to send the last value of iterator (when state.done == true)
   async: false, // allow async iteration (see next section for this and the rest of options)
   asyncRunner: thenableRunner,
