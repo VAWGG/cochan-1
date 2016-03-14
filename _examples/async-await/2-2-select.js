@@ -57,8 +57,6 @@ async function run() {
   let chB = new chan(0).named('B')
 
   worker(chA, chB).catch(p)
-  await sleep(500)
-
   producer(chA, [ 'X', 'Y', 'Z', 'P', 'Q' ]).catch(p)
   consumer(chB, 5).catch(p)
 
