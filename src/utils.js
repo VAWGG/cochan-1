@@ -55,7 +55,11 @@ function _mixin(dst, src) {
 
 
 export function repeat(x, n) {
-  return new Array(n).fill(x)
+  let arr = new Array(n)
+  for (let i = 0; i < n; ++i) {
+    arr[i] = x
+  }
+  return arr
 }
 
 
