@@ -1,5 +1,5 @@
 import assert from 'power-assert'
-import {CLOSED} from './constants'
+import {CLOSED, ERROR} from './constants'
 import {TimeoutChan} from './special-chans'
 
 export function selectSync(/* ...chans */) {
@@ -42,24 +42,24 @@ export function selectSync(/* ...chans */) {
 }
 
 
-function selectSyncNoThrow(/* ...chans */) {
+function trySelectSync(/* ...chans */) {
   try {
-    let value = selectSync.apply(null, arguments)
-    return { value, thrown: false }
-  } catch (value) {
-    return { value, thrown: true }
+    return selectSync.apply(null, arguments)
+  } catch (err) {
+    ERROR.value = err
+    return ERROR
   }
 }
 
 
 export function select(/* ...chans */) {
-  let syncResult = selectSyncNoThrow.apply(null, arguments)
-  if (syncResult.thrown) {
-    return Promise.reject(syncResult.value)
+  let syncResult = trySelectSync.apply(null, arguments)
+  if (syncResult === ERROR) {
+    return Promise.reject(ERROR.value)
   }
 
-  if (syncResult.value) {
-    return Promise.resolve(syncResult.value)
+  if (syncResult) {
+    return Promise.resolve(syncResult)
   }
 
   let fnVal, fnErr

@@ -15,3 +15,5 @@ export const CLOSED = new Marker('closed')
 export const FAILED = new Marker('failed')
 
 export const ISCHAN = new Marker('ischan')
+
+export const ERROR = { value: undefined }

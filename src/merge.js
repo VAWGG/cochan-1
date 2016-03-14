@@ -1,6 +1,6 @@
 import assert from 'power-assert'
 import {TimeoutChan} from './special-chans'
-import {CLOSED} from './constants'
+import {CLOSED, FAILED, ERROR} from './constants'
 
 const EMPTY = []
 
@@ -38,8 +38,12 @@ export function mergeTo(dst, srcs, closeDst) {
 
   function takeNext() {
     let syncResult = takeNextSync(true)
-    if (syncResult) {
-      onData(syncResult.value, syncResult.isError, null)
+    if (syncResult !== FAILED) {
+      if (syncResult === ERROR) {
+        onData(ERROR.value, true, null)
+      } else {
+        onData(syncResult, false, null)
+      }
     } else {
       subscribeForNext()
     }
@@ -90,7 +94,7 @@ export function mergeTo(dst, srcs, closeDst) {
       let i = (totalSyncSrcs == 1) ? 0 : Math.floor(totalSyncSrcs * Math.random())
       return tryTakeSyncFrom(syncSrcs[i].chan)
     }
-    return null
+    return FAILED
   }
 
   function subscribeForNext() {
@@ -125,9 +129,14 @@ export function mergeTo(dst, srcs, closeDst) {
     while (hasNextValue && canSendSync) {
       dst.sendSync(value, isError)
       let syncResult = takeNextSync(clearSyncState)
-      if (syncResult) {
-        value = syncResult.value
-        isError = syncResult.isError
+      if (syncResult !== FAILED) {
+        if (syncResult === ERROR) {
+          value = ERROR.value
+          isError = true
+        } else {
+          value = syncResult
+          isError = false
+        }        
         canSendSync = dst.canSendSync
         clearSyncState = false
       } else {
@@ -175,8 +184,9 @@ function tryTakeSyncFrom(chan) {
   assert(chan.canTakeSync)
   try {
     chan.takeSync()
-    return { value: chan.value, isError: false }
+    return chan.value
   } catch (err) {
-    return { value: err, isError: true }
+    ERROR.value = err
+    return ERROR
   }
 }
