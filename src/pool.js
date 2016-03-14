@@ -25,10 +25,8 @@ export default class Pool {
       let item = this._items[i]
       this._items[i] = EMPTY
       if (i > this.registeredMaxSize) {
-        // console.log(`Pool<${this.name}> new max size: ${this.registeredMaxSize}`)
         this.registeredMaxSize = i
       }
-      // console.log(`pool<${this.name}>.take(), len: ${i}`)
       if (this._prepare) {
         this._prepare(item)
       }
@@ -44,7 +42,6 @@ export default class Pool {
     if (index < this._maxIndex) {
       this._items[ index ] = item
       ++this._len
-      // console.log(`pool<${this.name}>.put(), len: ${this._len}`)
     } else {
       this._items[ index - 1 ] = item
     }

@@ -76,8 +76,6 @@ export class Chan {
   }
 
   sendSync(val, isError) {
-    // console.log(`    ${this}.sendSync(${val}, ${!!isError})`)
-
     if (this._state >= STATE_CLOSING) {
       return false
     }
@@ -133,8 +131,6 @@ export class Chan {
   }
 
   _send(val, isError, fnOk, fnErr, needsCancelFn) {
-    // console.log(`    ${this}._send(${val}, ${!!isError})`)
-
     if (this._state >= STATE_CLOSING) {
       fnErr(new Error('attempt to send into a closed channel'))
       return nop
@@ -168,8 +164,6 @@ export class Chan {
   }
 
   takeSync() {
-    // console.log(`    ${this}.takeSync()`)
-
     if (this._state == STATE_CLOSED) {
       return false
     }
@@ -220,8 +214,6 @@ export class Chan {
   }
 
   _take(fnVal, fnErr, needsCancelFn) {
-    // console.log(`    ${this}._take()`)
-
     if (this._state == STATE_CLOSED) {
       fnVal && fnVal(CLOSED)
       return nop
