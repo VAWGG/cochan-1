@@ -13,9 +13,6 @@ function* $worker(name, workItems, cancelCh, globalTimeoutCh) {
     // is a proposal that, if accepted by TC39, will allow to use `await` keyword inside
     // generators: https://github.com/tc39/proposal-async-iteration.
     let sel = yield chan.select(resultCh, cancelCh, globalTimeoutCh, chan.timeout(1000))
-    // Note: if we didn't want cancel and timeout functionality, we could yield
-    // the Promise returned from doWork(work) right away:
-    // let result = yield doWork(work)
     switch (sel) {
       case resultCh:
         let result = resultCh.value
@@ -31,6 +28,13 @@ function* $worker(name, workItems, cancelCh, globalTimeoutCh) {
         p(`[${ name }] channel closed`)
         return
     }
+    // Note: if we didn't want cancel and timeout functionality, we could yield
+    // the Promise returned from doWork(work) right away:
+    //
+    // let work = workItems.shift()
+    // let result = yield doWork(work)
+    // if (result == chan.CLOSED) break
+    // yield result // send into the chan
   }
   p(`[${ name }] finished`)
 }
@@ -65,9 +69,13 @@ async function run() {
   // timeout for the whole run
   let timeoutCh = chan.timeout(5000)
 
-  let ch1 = chan.fromGenerator($worker('a', ['a', 'b', 'c'], cancelCh, timeoutCh), { async: true })
-  let ch2 = chan.fromGenerator($worker('b', ['x', 'y', 'z'], cancelCh, timeoutCh), { async: true })
-  let ch3 = chan.fromGenerator($worker('c', ['1', '2', '3'], cancelCh, timeoutCh), { async: true })
+  let gen1 = $worker('a', ['a', 'b', 'c'], cancelCh, timeoutCh)
+  let gen2 = $worker('b', ['x', 'y', 'z'], cancelCh, timeoutCh)
+  let gen3 = $worker('c', ['1', '2', '3'], cancelCh, timeoutCh)
+
+  let ch1 = chan.fromGenerator(gen1, { async: true })
+  let ch2 = chan.fromGenerator(gen2, { async: true })
+  let ch3 = chan.fromGenerator(gen3, { async: true })
 
   let ch = chan.merge(ch1, ch2, ch3)
 
