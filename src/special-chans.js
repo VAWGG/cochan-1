@@ -21,8 +21,12 @@ export class SpecialChan {
     return false
   }
 
-  maybeCanSendSync() {
-    return this.isClosed ? P_RESOLVED_WITH_FALSE : P_RESOLVED_WITH_TRUE
+  sendErrorSync(err) {
+    throw new Error(`sendErrorSync() is unsupported by ${ this.constructor.name }`)
+  }
+
+  sendError(err, close) {
+    throw new Error(`sendError() is unsupported by ${ this.constructor.name }`)
   }
 
   sendSync(val) {
@@ -31,6 +35,10 @@ export class SpecialChan {
 
   send(val) {
     throw new Error(`send() is unsupported by ${ this.constructor.name }`)
+  }
+
+  maybeCanSendSync() {
+    return this.isClosed ? P_RESOLVED_WITH_FALSE : P_RESOLVED_WITH_TRUE
   }
 
   _addConsumer(cons, needsCancelFn, now) {
