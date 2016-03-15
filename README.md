@@ -195,7 +195,7 @@ console.log(ch.canSend) // false
 
 The `send()` function has one disadvantage: it always returns a `Promise`. It means that,
 in order to ensure that the sent items are either consumed or buffered before sending the
-next one, you always need to wait until the returned `Promise is resolved. And each `Promise`
+next one, you always need to wait until the returned `Promise` is resolved. And each `Promise`
 gets resolved not earlier than on the next event loop tick, even if the channel can accept
 the next item immediately (e.g. the channel is a buffered one, or there are consumers
 waiting for a value on that channel).
