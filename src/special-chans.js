@@ -178,7 +178,11 @@ export class TimeoutChan extends SpecialChan { // mixins: DelayChanMixin
   }
 
   get _constructorArgsDesc() {
-    return this._message ? [ this._ms, this._message ] : [ this._ms ]
+    return this._message ? [ this._ms, this._message ] : this._ms
+  }
+
+  get _displayFlags() {
+    return this.canTakeSync ? super._displayFlags + '!' : super._displayFlags
   }
 }
 
@@ -304,7 +308,11 @@ export class DelayChan extends SpecialChan { // mixins: DelayChanMixin, OneTimeC
   }
 
   get _constructorArgsDesc() {
-    return this._value ? [ this._ms, this._value ] : [ this._ms ]
+    return this._value ? [ this._ms, this._value ] : this._ms
+  }
+
+  get _displayFlags() {
+    return this._isTriggered ? super._displayFlags + '!' : super._displayFlags
   }
 }
 
@@ -341,7 +349,13 @@ export class PromiseChan extends SpecialChan { // mixins: OneTimeChanMixin
   }
 
   get _constructorArgsDesc() {
-    return []
+    return { toString(){ return '...' } }
+  }
+
+  get _displayFlags() {
+    return this._promise
+      ? super._displayFlags
+      : super._displayFlags + (this._isError ? 'E' : 'v')
   }
 }
 

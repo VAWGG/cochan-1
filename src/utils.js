@@ -89,8 +89,10 @@ export function isGeneratorFunction(obj) {
 
 
 export function describeArray(arr) {
-  return arr && arr.length
-    ? arr.map(describeValue).join(', ')
+  return arr !== undefined
+    ? arr instanceof Array
+      ? arr.length ? arr.map(describeValue).join(', ') : ''
+      : describeValue(arr)
     : ''
 }
 

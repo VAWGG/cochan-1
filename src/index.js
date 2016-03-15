@@ -166,12 +166,13 @@ class ChanBase {
   }
 
   toString() {
+    let flags = this._displayFlags
     let desc = this.name == undefined
       ? `${ this._constructorName }(${ describeArray(this._constructorArgsDesc) })`
       : `${ this._constructorName }<${ this.name }>(${ describeArray(this._constructorArgsDesc) })`
-    return this.isActive
-      ? desc
-      : (this.isClosed ? '[x]' : '[.]') + desc
+    return flags
+      ? `[${ flags }]${ desc }`
+      : desc
   }
 
   inspect() {
@@ -183,7 +184,11 @@ class ChanBase {
   }
 
   get _constructorArgsDesc() {
-    return []
+    return undefined
+  }
+
+  get _displayFlags() {
+    return this.isActive ? '' : (this.isClosed ? 'x' : '.')
   }
 
   get _ischan() {
