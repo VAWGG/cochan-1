@@ -10,7 +10,7 @@ import {P_RESOLVED_WITH_FALSE, P_RESOLVED_WITH_TRUE} from './constants'
 export class SpecialChan {
 
   constructor() {
-    this._consumers = []
+    this._consumers = undefined
   }
 
   get canSend() {
@@ -42,7 +42,12 @@ export class SpecialChan {
   }
 
   _addConsumer(cons, needsCancelFn, now) {
-    this._consumers.push(cons)
+    let consumers = this._consumers
+    if (consumers) {
+      consumers.push(cons)
+    } else {
+      this._consumers = [cons]
+    }
     if (!this._isSubscribed) {
       this._subscribe(now)
     }
@@ -50,10 +55,12 @@ export class SpecialChan {
   }
 
   _removeConsumer(cons) {
-    let index = this._consumers.indexOf(cons)
+    let consumers = this._consumers
+    if (!consumers) return
+    let index = consumers.indexOf(cons)
     if (index >= 0) {
-      this._consumers.splice(index, 1)
-      if (this._consumers.length == 0 && this._isSubscribed) {
+      consumers.splice(index, 1)
+      if (consumers.length == 0 && this._isSubscribed) {
         this._unsubscribe()
       }
     }
@@ -127,7 +134,7 @@ export class TimeoutChan extends SpecialChan { // mixins: DelayChanMixin
   }
 
   get canTakeSync() {
-    return Date.now() >= this._timeoutDate
+    return !this._timeoutDate || Date.now() >= this._timeoutDate
   }
 
   maybeCanTakeSync() {
@@ -162,10 +169,12 @@ export class TimeoutChan extends SpecialChan { // mixins: DelayChanMixin
   }
 
   _timeout() {
-    if (this._consumers.length) {
+    let cons = this._consumers
+    this._consumers = undefined
+    if (cons.length) {
       let err = this._makeError()
-      while (this._consumers.length) {
-        this._consumers.shift()(err)
+      for (let i = 0; i < cons.length; ++i) {
+        cons[i](err)
       }
     }
   }
@@ -174,6 +183,7 @@ export class TimeoutChan extends SpecialChan { // mixins: DelayChanMixin
     if (this._isSubscribed) {
       this._unsubscribe()
       this._timeout()
+      this._timeoutDate = 0
     }
   }
 
@@ -302,7 +312,7 @@ export class DelayChan extends SpecialChan { // mixins: DelayChanMixin, OneTimeC
   }
 
   get _isTriggered() {
-    return Date.now() >= this._timeoutDate
+    return !this._timeoutDate || Date.now() >= this._timeoutDate
   }
 
   _timeout() {
