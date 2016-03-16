@@ -1,7 +1,7 @@
 import chan from '../../src'
 import {p} from '../utils'
 
-async function worker(chIn, chOut) {
+function worker(chIn, chOut) {
   let i = 1; while (true) {
     switch (chan.selectSync( chIn.take(), chOut.send(i) )) {
       case chIn:
@@ -29,7 +29,7 @@ function run() {
     chA.sendSync(item)
   }
 
-  worker(chA, chB).catch(p)
+  worker(chA, chB)
 }
 
 run()

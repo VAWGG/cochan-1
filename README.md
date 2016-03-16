@@ -17,7 +17,7 @@ Supported features:
 * Errors (readme TODO)
 * [Synchronous (non-blocking) operations](#synchronous-operations)
 * [Selection from a set of operations](#selection-from-a-set-of-operations)
-* [Timeouts](#timeouts)
+* [Timeouts and signals](#timeouts-and-signals)
 * [Merging multiple channels into one](#merging)
 * [Making channels from Promises](#making-a-channel-from-a-promise)
 * Making channels from [iterables, iterators, generators](#iterables-iterators-and-generators)
@@ -99,10 +99,11 @@ Only one consumer can receive a given value. This is the main semantic differenc
 between channels and Observable/FRP patterns, where the same value gets observed
 by all current consumers.
 
-> **Basic example**: [async-await](_examples/async-await/0-intro.js).<br>
-> **Buffering example**: [async-await](_examples/async-await/1-buffer.js),
-[generators-co](_examples/generators-co/1-buffer.js),
-[plain-promises](_examples/plain-promises/1-buffer.js).
+> **Examples**:<br>
+> Basic operations: [async-await](_examples/async-await/01-basic-operations.js).<br>
+> Buffering: [async-await](_examples/async-await/02-buffering.js),
+  [generators-co](_examples/generators-co/02-buffering.js),
+  [plain-promises](_examples/plain-promises/02-buffering.js).
 
 ### Closing
 
@@ -189,7 +190,8 @@ ch.close()
 console.log(ch.canSend) // false
 ```
 
-> **Basic example**: [async-await](_examples/async-await/0-intro.js).
+> **Examples**:<br>
+> Basic operations: [async-await](_examples/async-await/01-basic-operations.js).
 
 ### Synchronous operations
 
@@ -245,7 +247,8 @@ that these functions do not _guarantee_ that you'll be able to actually send/con
 a value synchronously, but instead just provide a hint that you can try and succeed with
 a high probability.
 
-> **Example**: [async-await](_examples/async-await/3-batch.js).
+> **Examples**:<br>
+> Batching: [async-await](_examples/async-await/08-batch.js).
 
 ### Selection from a set of operations
 
@@ -310,12 +313,16 @@ but for now it seems to be more useful than the golang's one.
 [golang select operation]: https://golang.org/ref/spec#Select_statements
 
 > **Examples:**<br>
-> Set of take operations: [async-await](_examples/async-await/2-1-select-take.js).<br>
-> Set of take and send operations: [async-await](_examples/async-await/2-2-select.js).<br>
-> Synchronous select: [async-await](_examples/async-await/2-3-select-sync.js).<br>
-> Send/receive with piped channels: [async-await](_examples/async-await/2-4-select-loop.js).
+> Selection from multiple take operations:
+  [async-await](_examples/async-await/03-select-take.js).<br>
+> Selection from multiple take and send operations:
+  [async-await](_examples/async-await/04-select-take-send.js).<br>
+> Batched selection: [async-await](_examples/async-await/09-batch-select.js).<br>
+> Cancellation using select: [async-await](_examples/async-await/06-cancellation.js).<br>
+> Timeout using select: [async-await](_examples/async-await/07-timeout.js).<br>
+> Send/receive with piped channels: [async-await](_examples/async-await/15-select-loop.js).
 
-### Timeouts
+### Timeouts and signals
 
 To create a timeout channel, use `chan.timeout(ms[, msg])`. The created channel can be used
 in combination with [`chan.select(...ops)`] to add a configurable timeout to some send/receive
@@ -345,10 +352,40 @@ define the single timeout channel for some long-running complex operation, and t
 channel in various places in the code. That way, all running operations will be interrupted at
 the time of a timeout.
 
+Another special kind of channels is signal channels. They are very similar to timeout channels,
+but return some value instead of an error, and get triggered not after some delay, but manually
+using the `trigger(value)` function. This allows you to easily make channels that communicate
+some message to all their consumers, without the need to know the number of consumers. For
+example, they can be used to notify all workers that they need to cancel:
+
+```js
+let chCancel = chan.signal()
+
+for (let i = 0; i < numWorkers; ++i) {
+  worker(chWork, chResults, chCancel).catch(handleWorkerError)
+}
+
+function cancelAllWorkers() {
+  chCancel.trigger()
+}
+
+function worker(chWork, chResults, chCancel) {
+  while (true) {
+    switch(await chan.select( chCancel /**, some other chans and operations **/ )) {
+      case chCancel:
+        console.log('cancelled, reason:', chCancel.value)
+        return
+      // other cases...
+    }
+  }
+}
+```
+
 > **Examples:**<br>
-> Plain chan.timeout(): [async-await](_examples/async-await/6-special-chans.js#L56).<br>
-> Select, take + timeout: [async-await](_examples/async-await/2-1-select-take.js).<br>
-> Select, take + send + timeout: [async-await](_examples/async-await/2-4-select-loop.js).
+> chan.timeout() and chan.signal(): [async-await](_examples/async-await/05-special-chans.js).<br>
+> Select + timeout: [async-await](_examples/async-await/07-timeout.js).<br>
+> Select + timeout (another example): [async-await](_examples/async-await/15-select-loop.js).<br>
+> Select with cancellation: [async-await](_examples/async-await/06-cancellation.js).
 
 
 ### Merging
@@ -380,7 +417,8 @@ var chMerged = chan.merge(ch1, ch2, ch3, {
 })
 ```
 
-> **Example**: [async-await](_examples/async-await/5-merge.js).
+> **Examples:**<br>
+> Merging channels: [async-await](_examples/async-await/11-merge.js).
 
 ### Making a channel from a Promise
 
@@ -391,7 +429,8 @@ channel will produce exactly one value/error and then immediately close.
 var ch = chan.fromPromise(somePromise)
 ```
 
-> **Example**: [async-await](_examples/async-await/6-special-chans.js#L32).
+> **Examples:**<br>
+> chan.fromPromise(): [async-await](_examples/async-await/05-special-chans.js#L17).
 
 ### Iterables, iterators and generators
 
@@ -448,8 +487,8 @@ all functions end with a return statement, even if you don't specify it explicit
 case an implicit `return undefined` will be appended automatically by the JavaScript VM.
 
 > **Examples**:<br>
-> Iterator: [async-await](_examples/async-await/7-iterator.js).<br>
-> Generator: [async-await](_examples/async-await/8-generator.js).
+> Iterator: [async-await](_examples/async-await/12-iterator.js).<br>
+> Generator: [async-await](_examples/async-await/13-generator.js).
 
 ### Async generators
 
@@ -566,7 +605,8 @@ chan.setAsyncDefaults({
 This setting will affect all future calls of `chan.fromIterable()`, `chan.fromIterator()`
 and `chan.fromGenerator()` in which `opts.async` is set to `true`.
 
-> **Example**: [async-await](_examples/async-await/9-async-generator.js).
+> **Examples**:<br>
+> Async generator: [async-await](_examples/async-await/14-async-generator.js).
 
 ### Streams
 
@@ -596,7 +636,8 @@ from `streamToChan()`.
 Also note that, when you pipe some stream into a channel, and that source stream
 ends, it will end (close) the channel too. This is a standard Streams behavior.
 
-> **Example**: [async-await](_examples/async-await/4-writable-stream.js).
+> **Examples**:<br>
+> Piping a stream into a chan: [async-await](_examples/async-await/10-writable-stream.js).
 
 
 ## TODO

@@ -22,7 +22,7 @@ function* $worker(name, workItems, cancelCh, globalTimeoutCh) {
         yield result
         break
       case cancelCh:
-        p(`[${ name }] cancelled`)
+        p(`[${ name }] cancelled, reason: ${ cancelCh.value }`)
         return
       case chan.CLOSED:
         p(`[${ name }] channel closed`)
@@ -52,15 +52,13 @@ function randomInt(max) {
 
 async function run() {
   // we can use this channel to cancel all workers anythime
-  let cancelCh = new chan(3)
+  let cancelCh = chan.signal()
 
   if (Math.random() > 0.5) {
     let delay = randomInt(1000)
     let cancel = () => {
       p(`!!! cancelling...`)
-      for (let i = 0; i < 3; ++i) {
-        cancelCh.sendSync()
-      }
+      cancelCh.trigger('you shall not pass')
     }
     p(`!!! will cancel after ${ delay } ms!`)
     setTimeout(cancel, delay)
