@@ -1,5 +1,6 @@
 import assert from 'power-assert'
-import {CLOSED, ISCHAN, ERROR, OP_TAKE, OP_SEND, THENABLE_INVALID_USE_MSG} from './constants'
+import {CLOSED, ISCHAN, ERROR, OP_TAKE, OP_SEND} from './constants'
+import {THENABLE_MIXED_USE_MSG, THENABLE_MULTIPLE_USE_MSG} from './constants'
 import {TimeoutChan} from './special-chans'
 import {Thenable} from './thenable'
 import {arrayPool} from './pools'
@@ -21,7 +22,10 @@ export function selectSync(/* ...chans */) {
         promise = undefined
       } else if (arg instanceof Thenable) {
         if (arg._cancel || arg._subs) {
-          throw new Error(THENABLE_INVALID_USE_MSG)
+          throw new Error(THENABLE_MIXED_USE_MSG)
+        }
+        if (arg._isSealed) {
+          throw new Error(THENABLE_MULTIPLE_USE_MSG)
         }
         promise = arg
         chan = promise._chan

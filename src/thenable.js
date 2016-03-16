@@ -1,4 +1,4 @@
-import {OP_TAKE, OP_SEND, THENABLE_INVALID_USE_MSG} from './constants'
+import {OP_TAKE, OP_SEND, THENABLE_MIXED_USE_MSG} from './constants'
 import {arrayPool} from './pools'
 
 const DEBUG = true
@@ -28,7 +28,7 @@ export class Thenable {
 
   then(onFulfilled, onRejected) {
     if (this._isSealed) {
-      throw new Error(THENABLE_INVALID_USE_MSG)
+      throw new Error(THENABLE_MIXED_USE_MSG)
     }
     return new Promise((resolve, reject) => {
       let result = this._result
