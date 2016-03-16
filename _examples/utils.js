@@ -1,5 +1,5 @@
 
-exports.p = function p() {
+exports.p = function p(/* ...args */) {
   var totalArgs = arguments.length
   if (totalArgs && arguments[totalArgs - 1] instanceof Error) {
     var args = Array.apply(null, arguments)

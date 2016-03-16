@@ -68,6 +68,100 @@ export class SpecialChan {
 }
 
 
+class AlwaysActiveChanMixin {
+
+  get isClosed() {
+    return false
+  }
+
+  get isActive() {
+    return true
+  }
+
+  closeSync() {
+    throw new Error(`closeSync() is unsupported by ${ this.constructor.name }`)
+  }
+
+  close() {
+    throw new Error(`close() is unsupported by ${ this.constructor.name }`)
+  }
+
+  closeNow() {
+    throw new Error(`closeNow() is unsupported by ${ this.constructor.name }`)
+  }
+}
+
+
+export class SignalChan extends SpecialChan { // mixins: AlwaysActiveChanMixin
+
+  constructor() {
+    super()
+    this._value = undefined
+    this._isTriggered = false
+  }
+
+  get value() {
+    return this._isTriggered ? this._value : undefined
+  }
+
+  get canTakeSync() {
+    return this._isTriggered
+  }
+
+  maybeCanTakeSync() {
+    if (this._isTriggered) {
+      return P_RESOLVED_WITH_TRUE
+    }
+    return new Promise(resolve => {
+      let fn = () => resolve(true)
+      this._take(fn, undefined, false)
+    })
+  }
+
+  takeSync() {
+    if (!this._isTriggered) {
+      return false
+    }
+    return this._value
+  }
+
+  _take(fnVal, fnErr, needsCancelFn) {
+    if (this._isTriggered) {
+      fnVal && fnVal(this._value)
+      return nop
+    }
+    return fnVal ? this._addConsumer(fnVal, needsCancelFn) : nop
+  }
+
+  trigger(value) {
+    if (!this._isTriggered) {
+      this._isTriggered = true
+      this._value = value
+      let cons = this._consumers
+      this._consumers = undefined
+      for (let i = 0; i < cons.length; ++i) {
+        cons[i](value)
+      }
+    }
+  }
+
+  get _isSubscribed() {
+    return true
+  }
+
+  _subscribe(now) {}
+  _unsubscribe() {}
+
+  get _constructorName() {
+    return 'chan.signal'
+  }
+
+  get _displayFlags() {
+    return this._isTriggered ? super._displayFlags + '!' : super._displayFlags
+  }
+}
+
+
 // requires: call _initDelayChanBase(), implement _timeout()
 //
 class DelayChanMixin {
@@ -101,7 +195,7 @@ class DelayChanMixin {
 }
 
 
-export class TimeoutChan extends SpecialChan { // mixins: DelayChanMixin
+export class TimeoutChan extends SpecialChan { // mixins: DelayChanMixin, AlwaysActiveChanMixin
 
   constructor(ms, message) {
     super()
@@ -111,26 +205,6 @@ export class TimeoutChan extends SpecialChan { // mixins: DelayChanMixin
 
   get value() {
     return undefined
-  }
-
-  get isClosed() {
-    return false
-  }
-
-  get isActive() {
-    return true
-  }
-
-  closeSync() {
-    throw new Error(`closeSync() is unsupported by ${ this.constructor.name }`)
-  }
-
-  close() {
-    throw new Error(`close() is unsupported by ${ this.constructor.name }`)
-  }
-
-  closeNow() {
-    throw new Error(`closeNow() is unsupported by ${ this.constructor.name }`)
   }
 
   get canTakeSync() {
@@ -378,7 +452,10 @@ export class PromiseChan extends SpecialChan { // mixins: OneTimeChanMixin
 }
 
 
+mixin(SignalChan, AlwaysActiveChanMixin.prototype)
+
 mixin(TimeoutChan, DelayChanMixin.prototype)
+mixin(TimeoutChan, AlwaysActiveChanMixin.prototype)
 
 mixin(DelayChan, DelayChanMixin.prototype)
 mixin(DelayChan, OneTimeChanMixin.prototype)

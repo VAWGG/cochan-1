@@ -1,5 +1,5 @@
 import {Chan} from './chan'
-import {SpecialChan, TimeoutChan, DelayChan, PromiseChan} from './special-chans'
+import {SpecialChan, SignalChan, TimeoutChan, DelayChan, PromiseChan} from './special-chans'
 import {EventEmitterMixin} from './event-emitter'
 import {Thenable} from './thenable'
 import {thenablePool} from './pools'
@@ -72,6 +72,10 @@ class ChanBase {
   static setScheduler({ microtask, macrotask }) {
     schedule.microtask = microtask || schedule.microtask
     schedule.macrotask = macrotask || schedule.macrotask
+  }
+
+  static signal(value) {
+    return new SignalChan(value)
   }
 
   static timeout(ms, message) {
