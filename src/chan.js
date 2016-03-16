@@ -15,6 +15,7 @@ const TYPE_VALUE = 0
 const TYPE_ERROR = 1
 const TYPE_WAITER = 2
 const TYPE_CANCELLED = 3
+const TYPE_CLOSE_WAITER = 4
 
 const SUCCESS = []
 
@@ -310,6 +311,9 @@ export class Chan {
     if (this._state == STATE_CLOSED) {
       return true
     }
+    if (this._state == STATE_CLOSING) {
+      return false
+    }
     if (this._state == STATE_WAITING_FOR_PUBLISHER) {
       this._state = STATE_CLOSED
       this._terminateAllWaitingConsumers()
@@ -337,14 +341,17 @@ export class Chan {
       return P_RESOLVED
     }
 
+    assert(this._buffer.length > 0)
+
     if (this._state == STATE_CLOSING) {
-      assert(this._buffer.length > 0)
-      assert(this._buffer[ this._buffer.length - 1 ].promise != undefined)
+      assert(this._buffer[ this._buffer.length - 1 ].type == TYPE_CLOSE_WAITER)
       return this._buffer[ this._buffer.length - 1 ].promise
     }
 
     let resolve, promise = new Promise(res => { resolve = res })
-    let item = { promise, fns: [resolve], fnVal: undefined, fnErr: undefined }
+
+    let item = { type: TYPE_CLOSE_WAITER, promise, fns: [resolve],
+      fnVal: undefined, fnErr: undefined }
 
     item.fnVal = item.fnErr = () => {
       this.emit('finish')
@@ -398,22 +405,36 @@ export class Chan {
       return { item: FAILED, waiters: waiters }
     }
 
-    assert(item.type == TYPE_VALUE || item.type == TYPE_ERROR)
+    assert(item.type == TYPE_VALUE || item.type == TYPE_ERROR || item.type == TYPE_CLOSE_WAITER)
 
-    if (item.type == TYPE_VALUE) {
-      this._value = item.val
+    let closeWaiter = undefined
+
+    if (item.type == TYPE_CLOSE_WAITER) {
+      closeWaiter = item
+      item = FAILED
+    } else {
+      if (item.type == TYPE_VALUE) {
+        this._value = item.val
+      }
+      if (this._state == STATE_CLOSING && this._buffer.length == 1) {
+        // the only item left is the one containing closing listeners
+        closeWaiter = this._buffer.shift()
+      }
     }
 
-    if (this._state == STATE_CLOSING && this._buffer.length == 1) {
-      // the only item left is the one containing closing listeners
-      assert(this._buffer[0].promise != undefined)
-      assert(this._buffer[0].fnVal != undefined)
+    if (closeWaiter) {
+      assert(this._state == STATE_CLOSING)
+      assert(this._buffer.length == 0)
+      assert(this._totalWaiters == 1)
+      assert(closeWaiter.type == TYPE_CLOSE_WAITER)
+      assert(closeWaiter.promise != undefined)
+      assert(closeWaiter.fnVal != undefined)
       this._state = STATE_CLOSED
+      this._totalWaiters = 0
       // the channel has closed, so notify all waiters for opportunity to publish
       waiters && this._triggerWaiters(waiters, CLOSED, false)
       // notify that the channel has closed
-      this._totalWaiters = 0
-      this._buffer.shift().fnVal()
+      closeWaiter.fnVal()
     } else if (waiters) {
       // the value will be produced, so put all waiters for opportunity to publish
       // back where they were before
@@ -525,6 +546,11 @@ export class Chan {
 
   get _constructorArgsDesc() {
     return [ this._bufferSize ]
+  }
+
+  get _stateName() {
+    let names = ['STATE_NORMAL', 'STATE_WAITING_FOR_PUBLISHER', 'STATE_CLOSING', 'STATE_CLOSED']
+    return names[ this._state ]
   }
 }
 
