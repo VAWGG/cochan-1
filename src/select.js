@@ -127,7 +127,7 @@ export function select(/* ...chans */) {
 
   let fnVal, fnErr
   let promise = new Promise((res, rej) => { fnVal = res; fnErr = rej })
-  let subs = []
+  let subs = arrayPool.take()
   let numClosed = 0
 
   for (let i = 0; i < arguments.length; ++i) {
@@ -201,6 +201,7 @@ export function select(/* ...chans */) {
         thenablePool.put(promise)
       }
     }
+    arrayPool.put(subs)
   }
 
   return promise
