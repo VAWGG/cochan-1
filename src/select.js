@@ -151,6 +151,10 @@ export function select(/* ...chans */) {
     }
   }
 
+  // this is handled by selectSync
+  assert(subs.length > 0)
+  return promise
+
   function onValue(value, chan) {
     if (value === CLOSED) {
       if (++numClosed < subs.length) {
@@ -203,6 +207,4 @@ export function select(/* ...chans */) {
     }
     arrayPool.put(subs)
   }
-
-  return promise
 }
