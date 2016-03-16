@@ -2,7 +2,7 @@ import assert from 'power-assert'
 import {CLOSED, ISCHAN, ERROR, OP_TAKE, OP_SEND, THENABLE_INVALID_USE_MSG} from './constants'
 import {TimeoutChan} from './special-chans'
 import {Thenable} from './thenable'
-import {arrayPool, thenablePool} from './pools'
+import {arrayPool} from './pools'
 
 
 export function selectSync(/* ...chans */) {
@@ -40,8 +40,8 @@ export function selectSync(/* ...chans */) {
       } else if (!chan.isClosed) {
         hasAliveNormalChans = true
       } else if (promise) {
-        // cancel the pending async operation and return thenable into the pool
-        thenablePool.put(promise)
+        // cancel the pending async operation
+        promise._op = 0
       }
     }
   }
@@ -91,8 +91,8 @@ export function selectSync(/* ...chans */) {
   for (let i = 0; i < total; ++i) {
     let arg = arguments[i]
     if (arg instanceof Thenable) {
-      // cancel the pending async operation and return thenable into the pool
-      thenablePool.put(arg)
+      // cancel the pending async operation
+      arg._op = 0
     }
   }
 
@@ -201,8 +201,7 @@ export function select(/* ...chans */) {
         // cancel function which later gets assigned to promise._cancel, might have
         // not returned yet
         promise._cancel && promise._cancel()
-        // return thenable into the pool
-        thenablePool.put(promise)
+        promise._op = 0
       }
     }
     arrayPool.put(subs)

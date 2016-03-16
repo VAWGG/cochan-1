@@ -1,7 +1,6 @@
 import assert from 'power-assert'
 import schedule from './schedule'
 import {Thenable} from './thenable'
-import {thenablePool} from './pools'
 import {repeat, nop} from './utils'
 import {CLOSED, FAILED, OP_SEND} from './constants'
 import {P_RESOLVED, P_RESOLVED_WITH_FALSE, P_RESOLVED_WITH_TRUE} from './constants'
@@ -112,18 +111,14 @@ export class Chan {
   }
 
   send(value, isError) {
-    let promise = thenablePool.take()
-    let reuseId = promise._reuseId
-    promise._chan = this
-    promise._op = OP_SEND
+    let promise = new Thenable(this, OP_SEND)
     promise._sendData = { value, isError }
     schedule.microtask(() => {
-      if (promise._reuseId == reuseId) {
+      if (promise._op) {
         let bound = promise._bound
         let cancel = this._send(value, isError, bound.fulfill, bound.reject, true)
-        // the previous line might have already cancelled this promise
-        // and put it into the reuse pool, so we need to check
-        if (promise._reuseId == reuseId) {
+        // the previous line might have already cancelled this promise, so we need to check
+        if (promise._op) {
           promise._cancel = cancel
         }
       }

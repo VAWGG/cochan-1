@@ -63,37 +63,6 @@ export class Thenable {
     this._state = (this._state & ~0b11) | op
   }
 
-  get _reuseId() {
-    // max: 2^28 - 1 = 268435455
-    return this._state >> 3
-  }
-
-  _reuse() {
-    // _op = 0, sealed, ++_reuseId (mod 2^28)
-    let newState = (this._state & ~0b111) + 0b1100
-    // 2147483640 == (2^28 - 1) << 3 == 0b111...11000 (1x28 and 0x3)
-    this._state = newState > 2147483640 ? 0b100 : newState
-    this._chan = undefined
-    let subs = this._subs; if (subs) {
-      if (subs instanceof Array) {
-        arrayPool.put(subs)
-      }
-      this._subs = undefined
-    }
-    if (this._cancel) {
-      this._cancel = undefined
-    }
-    if (this._result) {
-      this._result = undefined
-    }
-    if (this._sendData) {
-      this._sendData = undefined
-    }
-    if (DEBUG) {
-      this._id = ++nextId
-    }
-  }
-
   get _isSealed() {
     return this._state & 0b100
   }
