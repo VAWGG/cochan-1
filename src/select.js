@@ -13,37 +13,36 @@ export function selectSync(/* ...chans */) {
 
   for (let i = 0; i < total; ++i) {
     let arg = arguments[i]
-    if (!arg) {
-      throw new Error('select expects a list of operations or channels, got: ' + arg)
-    }
-    let chan, op, promise
-    if (arg._ischan === ISCHAN) {
-      chan = arg
-      op = OP_TAKE
-      promise = undefined
-    } else if (arg instanceof Thenable) {
-      if (arg._cancel || arg._subs) {
-        throw new Error(THENABLE_INVALID_USE_MSG)
+    if (arg) {
+      let chan, op, promise
+      if (arg._ischan === ISCHAN) {
+        chan = arg
+        op = OP_TAKE
+        promise = undefined
+      } else if (arg instanceof Thenable) {
+        if (arg._cancel || arg._subs) {
+          throw new Error(THENABLE_INVALID_USE_MSG)
+        }
+        promise = arg
+        chan = promise._chan
+        op = promise._op
+        promise._seal()
+      } else {
+        throw new Error('select only supports passing take, send operations and channels')
       }
-      promise = arg
-      chan = promise._chan
-      op = promise._op
-      promise._seal()
-    } else {
-      throw new Error('select only supports take and send operations')
-    }
-    if (chan instanceof TimeoutChan) {
-      if (chan.canTakeSync) {
-        syncTimeouts.push(chan)
+      if (chan instanceof TimeoutChan) {
+        if (chan.canTakeSync) {
+          syncTimeouts.push(chan)
+        }
+      } else if (op == OP_TAKE ? chan.canTakeSync : chan.canSendSync) {
+        syncOps.push({ chan, promise, kind: op })
+        hasAliveNormalChans = true
+      } else if (!chan.isClosed) {
+        hasAliveNormalChans = true
+      } else if (promise) {
+        // cancel the pending async operation and return thenable into the pool
+        thenablePool.put(promise)
       }
-    } else if (op == OP_TAKE ? chan.canTakeSync : chan.canSendSync) {
-      syncOps.push({ chan, promise, kind: op })
-      hasAliveNormalChans = true
-    } else if (!chan.isClosed) {
-      hasAliveNormalChans = true
-    } else if (promise) {
-      // cancel the pending async operation and return thenable into the pool
-      thenablePool.put(promise)
     }
   }
 
@@ -133,20 +132,22 @@ export function select(/* ...chans */) {
 
   for (let i = 0; i < arguments.length; ++i) {
     let arg = arguments[i]
-    if (arg._ischan === ISCHAN) {
-      if (!arg.isClosed) {
-        subs.push({
-          promise: undefined,
-          unsub: arg._take(v => onValue(v, arg), onTakeError, true)
+    if (arg) {
+      if (arg._ischan === ISCHAN) {
+        if (!arg.isClosed) {
+          subs.push({
+            promise: undefined,
+            unsub: arg._take(v => onValue(v, arg), onTakeError, true)
+          })
+        }
+      } else if (!arg._chan.isClosed) {
+        assert(arg instanceof Thenable)
+        arg._addSub({
+          onFulfilled: v => onValue(v, arg._chan),
+          onRejected: e => onSendError(e, arg._chan)
         })
+        subs.push({ promise: arg, unsub: undefined })
       }
-    } else if (!arg._chan.isClosed) {
-      assert(arg instanceof Thenable)
-      arg._addSub({
-        onFulfilled: v => onValue(v, arg._chan),
-        onRejected: e => onSendError(e, arg._chan)
-      })
-      subs.push({ promise: arg, unsub: undefined })
     }
   }
 
