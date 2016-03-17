@@ -13,11 +13,7 @@ const STATE_CLOSED = 3
 
 const TYPE_VALUE = 0
 const TYPE_ERROR = 1
-const TYPE_WAITER = 2
-const TYPE_CANCELLED = 3
-const TYPE_CLOSE_WAITER = 4
-
-const SUCCESS = []
+const TYPE_CANCELLED = 2
 
 
 export class Chan {
@@ -27,7 +23,7 @@ export class Chan {
     this._state = STATE_NORMAL
     this._bufferSize = bufferSize
     this._buffer = []
-    this._totalWaiters = 0
+    this._waiters = []
     this._value = undefined
   }
 
@@ -49,19 +45,16 @@ export class Chan {
   }
 
   get canSendSync() {
-    assert(this._buffer.length - this._totalWaiters >= 0)
-    let numNonWaiters = this._buffer.length - this._totalWaiters
-    // If waiting for publisher, there must be either at least one "real" consumer in the buffer, or
-    // the channel must tolerate buffering (sending without blocking) at least one value.
+    // If waiting for publisher, there must be either at least one waiting real consumer, or
+    // the channel must tolerate buffering at least one value.
     // If waiting for consumer, the channel must tolerate buffering at least one more value.
-    return this._state == STATE_WAITING_FOR_PUBLISHER && (numNonWaiters > 0 || this._bufferSize > 0)
-        || this._state == STATE_NORMAL && numNonWaiters < this._bufferSize
+    return this._state == STATE_WAITING_FOR_PUBLISHER
+        && (this._buffer.length > 0 || this._bufferSize > 0)
+      || this._state == STATE_NORMAL && this._buffer.length < this._bufferSize
   }
 
   get canTakeSync() {
-    assert(this._buffer.length - this._totalWaiters >= 0)
-    return this._state != STATE_WAITING_FOR_PUBLISHER
-        && this._buffer.length - this._totalWaiters > 0
+    return this._state != STATE_WAITING_FOR_PUBLISHER && this._buffer.length > 0
   }
 
   sendErrorSync(err) {
@@ -76,36 +69,33 @@ export class Chan {
     }
   }
 
-  sendSync(val, isError) {
+  sendSync(value, isError) {
     if (this._state >= STATE_CLOSING) {
       return false
     }
 
-    let waiters
-    if (this._state == STATE_WAITING_FOR_PUBLISHER) {
-      waiters = this._sendToWaitingConsumer(val, isError)
-      if (waiters === SUCCESS) { // value was consumed
-        return true
-      }
-    }
-
-    assert(this._state == STATE_NORMAL)
-    assert(this._buffer.length - this._totalWaiters >= 0)
-
-    if (this._buffer.length - this._totalWaiters < this._bufferSize) {
-      this._buffer.push({ val, type: isError ? TYPE_ERROR : TYPE_VALUE,
-        fnVal: undefined, fnErr: undefined })
-      // notify all waiters for opportunity to consume
-      waiters && this._triggerWaiters(waiters, val, isError)
+    if (this._state == STATE_WAITING_FOR_PUBLISHER && this._sendToWaitingConsumer(value, isError)) {
       return true
     }
 
-    if (waiters) {
-      // on next tick, notify all waiters for opportunity to consume
-      schedule.microtask(() => {
-        let value = this._state == STATE_CLOSED ? CLOSED : undefined
-        this._triggerWaiters(waiters, value, false)
-      })
+    assert(this._state == STATE_NORMAL)
+
+    if (this._buffer.length < this._bufferSize) {
+      this._buffer.push({ value, type: isError ? TYPE_ERROR : TYPE_VALUE,
+        fnVal: undefined, fnErr: undefined })
+      // notify all waiters for opportunity to consume
+      this._triggerWaiters(true)
+      return true
+    }
+
+    if (this._waiters.length) {
+      // The publisher wasn't able to publish synchronously. Probably it will either start
+      // waiting for the opportunity to do this again using maybeCanSendSync(), or will just
+      // publish asynchronously using send(). The latter case is an opportunity to consume,
+      // so notify all waiters for such an opportunity, but do this on the next macrotick to
+      // give the publisher time to actually call send().
+      let waiters = this._waiters.splice(0)
+      schedule.macrotask(() => triggerWaiters(waiters, this._state != STATE_CLOSED))
     }
     
     return false
@@ -127,65 +117,54 @@ export class Chan {
     return promise
   }
 
-  _send(val, isError, fnOk, fnErr, needsCancelFn) {
+  _send(value, isError, fnOk, fnErr, needsCancelFn) {
     if (this._state >= STATE_CLOSING) {
       fnErr(new Error('attempt to send into a closed channel'))
       return nop
     }
 
-    let waiters
-    if (this._state == STATE_WAITING_FOR_PUBLISHER) {
-      waiters = this._sendToWaitingConsumer(val, isError)
-      if (waiters === SUCCESS) { // value was consumed
-        fnOk(undefined)
-        return nop
-      }
+    if (this._state == STATE_WAITING_FOR_PUBLISHER && this._sendToWaitingConsumer(value, isError)) {
+      fnOk(undefined)
+      return nop
     }
 
     assert(this._state == STATE_NORMAL)
-    assert(this._buffer.length - this._totalWaiters >= 0)
 
     let item
 
-    if (this._buffer.length - this._totalWaiters < this._bufferSize) {
-      this._buffer.push(item = { val, type: isError ? TYPE_ERROR : TYPE_VALUE,
+    if (this._buffer.length < this._bufferSize) {
+      this._buffer.push(item = { value, type: isError ? TYPE_ERROR : TYPE_VALUE,
         fnVal: undefined, fnErr: undefined })
       fnOk(undefined)
     } else {
-      this._buffer.push(item = { val, type: isError ? TYPE_ERROR : TYPE_VALUE,
+      this._buffer.push(item = { value, type: isError ? TYPE_ERROR : TYPE_VALUE,
         fnVal: fnOk, fnErr: fnErr })
     }
 
-    waiters && this._triggerWaiters(waiters, val, isError)
+    this._triggerWaiters(true)
     return needsCancelFn ? () => { item.type = TYPE_CANCELLED } : nop
   }
 
   takeSync() {
-    if (this._state == STATE_CLOSED) {
-      return false
-    }
-
-    if (this._state == STATE_WAITING_FOR_PUBLISHER || this._buffer.length == 0) {
+    if (this._state == STATE_CLOSED || this._state == STATE_WAITING_FOR_PUBLISHER) {
       return false
     }
 
     assert(this._state == STATE_NORMAL || this._state == STATE_CLOSING)
+    assert(this._state == STATE_NORMAL || this._buffer.length > 0)
 
-    let result = this._takeFromWaitingPublisher()
-    let {item} = result
-
+    let item = this._buffer.length == 0 ? FAILED : this._takeFromWaitingPublisher()
     if (item === FAILED) {
-      // on next tick, notify all waiters for opportunity to publish
-      if (result.waiters) {
-        schedule.microtask(() => {
-          if (this._state < STATE_CLOSING) {
-            this._triggerWaiters(result.waiters, undefined, false)
-            this._needsDrain && this._emitDrain()
-          } else {
-            let err = new Error('channel closed')
-            this._triggerWaiters(result.waiters, err, true)
-          }
-        })
+      if (this._state == STATE_CLOSING) {
+        this._close()
+      } else if (this._waiters.length) {
+        // The consumer wasn't able to consume synchronously. Probably it will either start
+        // waiting for the opportunity to do this again using maybeCanTakeSync(), or will just
+        // consume asynchronously using take(). The latter case is an opportunity to publish,
+        // so notify all waiters for such an opportunity, but do this on the next macrotick to
+        // give the consumer time to actually call take().
+        let waiters = this._waiters.splice(0)
+        schedule.macrotask(() => triggerWaiters(waiters, this._state < STATE_CLOSING))
       }
       return false
     }
@@ -193,20 +172,21 @@ export class Chan {
     let type = item.type
     assert(type == TYPE_VALUE || type == TYPE_ERROR)
 
-    item.fnVal && item.fnVal()
-    
-    if (result.waiters) {
-      schedule.microtask(() => {
-        this._triggerWaiters(result.waiters, undefined, false)
-        this._needsDrain && this._emitDrain()
-      })
+    if (this._state == STATE_CLOSING) {
+      if (this._buffer.length == 0) {
+        this._close()
+      }
+    } else {
+      this._triggerWaiters(true)
+      this._needsDrain && this._emitDrain()
     }
+
+    item.fnVal && item.fnVal()
 
     if (type == TYPE_ERROR) {
-      throw item.val
+      throw item.value
     }
 
-    assert(type == TYPE_VALUE)
     return true
   }
 
@@ -216,95 +196,91 @@ export class Chan {
       return nop
     }
 
-    let waiters
-
     if (this._state != STATE_WAITING_FOR_PUBLISHER && this._buffer.length) {
-      let result = this._takeFromWaitingPublisher()
-      let {item} = result
-      if (item !== FAILED) {
+      let item = this._takeFromWaitingPublisher()
+      if (item === FAILED) {
+        if (this._state == STATE_CLOSING) {
+          this._close()
+          fnVal && fnVal(CLOSED)
+          return nop
+        }
+      } else {
         assert(item.type == TYPE_VALUE || item.type == TYPE_ERROR)
         let fn = item.type == TYPE_VALUE ? fnVal : fnErr
         item.fnVal && item.fnVal() // this may change item.type to TYPE_CANCELLED
-        fn && fn(item.val)
-        result.waiters && this._triggerWaiters(result.waiters)
-        this._needsDrain && this._emitDrain()
+        fn && fn(item.value)
+        if (this._state == STATE_CLOSING) {
+          if (this._buffer.length == 0) {
+            this._close()
+          }
+        } else {
+          this._triggerWaiters(true)
+          this._needsDrain && this._emitDrain()
+        }
         return nop
       }
-      waiters = result.waiters
     }
 
     this._state = STATE_WAITING_FOR_PUBLISHER
-    let item = { fnVal, fnErr, consumes: true }
+    let item = { fnVal, fnErr }
     this._buffer.push(item)
 
     // notify all waiters for the opportunity to publish
-    waiters && this._triggerWaiters(waiters, undefined, false)
-    this._needsDrain && this._emitDrain()
+    this._triggerWaiters(true)
+    this._needsDrain && this._emitDrain() // TODO: probably not needed here
 
-    return needsCancelFn
-      ? () => {
-        item.fnVal = undefined
-        item.fnErr = undefined
-        item.consumes = false
-      }
-      : nop
+    return needsCancelFn ? () => { item.fnVal = item.fnErr = undefined } : nop
+  }
+
+  _close() {
+    assert(this._buffer.length == 0)
+    this._state = STATE_CLOSED
+    this._triggerWaiters(false)
   }
 
   maybeCanTakeSync() {
     if (this._state == STATE_CLOSED) {
       return P_RESOLVED_WITH_FALSE
     }
+
     if (this.canTakeSync) {
       return P_RESOLVED_WITH_TRUE
     }
-    if (this._state == STATE_NORMAL && this._buffer.length) {
-      // there are some waiters for opportunity to publish, but no data in the buffer
-      assert(this._totalWaiters == this._buffer.length)
-      assert.deepEqual(this._buffer.map(x => x.type), repeat(TYPE_WAITER, this._buffer.length))
-      let waiters = this._buffer.slice()
-      this._buffer.length = 0
-      this._totalWaiters = 0
-      this._triggerWaiters(waiters, undefined, false)
-    } else if (this._state == STATE_CLOSING) {
-      // closing but no data left in the buffer
-      assert.ok(false, 'this should not happen')
-      return P_RESOLVED_WITH_FALSE
-    }
+
+    // STATE_CLOSING should be impossible here, as otherwise this.canTakeSync would be true
     assert(this._state == STATE_NORMAL || this._state == STATE_WAITING_FOR_PUBLISHER)
-    this._state = STATE_WAITING_FOR_PUBLISHER
-    return new Promise(resolve => {
-      let onData = (data) => data === CLOSED ? resolve(false) : resolve(true)
-      this._buffer.push({ fnVal: onData, fnErr: onData, consumes: false })
-      ++this._totalWaiters
-      this._needsDrain && this._emitDrain()
-    })
+
+    if (this._state == STATE_NORMAL) {
+      // there are (maybe) some waiters for opportunity to publish, but no actual publishers
+      this._state = STATE_WAITING_FOR_PUBLISHER
+      this._triggerWaiters(true)
+    }
+
+    // waiters must be triggered not earlier than on the next tick
+    assert(this._state == STATE_WAITING_FOR_PUBLISHER)
+
+    return new Promise(resolve => this._waiters.push(resolve))
   }
 
   maybeCanSendSync() {
     if (this._state >= STATE_CLOSING) {
       return P_RESOLVED_WITH_FALSE
     }
+
     if (this.canSendSync) {
       return P_RESOLVED_WITH_TRUE
     }
-    if (this._state == STATE_WAITING_FOR_PUBLISHER && this._buffer.length) {
-      // there are some waiters for opportunity to consume, but no actual consumers
-      assert(this._totalWaiters == this._buffer.length)
-      assert.deepEqual(this._buffer.map(x => x.consumes), repeat(false, this._buffer.length))
-      let waiters = this._buffer.slice()
-      this._buffer.length = 0
-      this._totalWaiters = 0
-      this._triggerWaiters(waiters, undefined, false)
-    }
+
     assert(this._state == STATE_NORMAL || this._state == STATE_WAITING_FOR_PUBLISHER)
-    return new Promise(resolve => {
-      this._buffer.push({
-        fnVal: () => resolve(true),
-        fnErr: () => resolve(false),
-        type: TYPE_WAITER
-      })
-      ++this._totalWaiters
-    })
+
+    if (this._state == STATE_WAITING_FOR_PUBLISHER) {
+      // there are (maybe) some waiters for opportunity to consume, but no actual consumers
+      this._triggerWaiters(true)
+      // waiters must be triggered not earlier than on the next tick
+      assert(this._state == STATE_WAITING_FOR_PUBLISHER)
+    }
+    
+    return new Promise(resolve => this._waiters.push(resolve))
   }
 
   closeSync() {
@@ -317,21 +293,20 @@ export class Chan {
     if (this._state == STATE_WAITING_FOR_PUBLISHER) {
       this._state = STATE_CLOSED
       this._terminateAllWaitingConsumers()
+      this._triggerWaiters(false)
       this.emit('finish')
       return true
     }
-    if (this._buffer.length - this._totalWaiters == 0) {
-      // there are no real publishers, only waiters for opportunity to publish => kill 'em
-      assert.deepEqual(this._buffer.map(x => x.type), repeat(TYPE_WAITER, this._buffer.length))
+    if (this._buffer.length == 0) {
+      // there are no real publishers, only (maybe) waiters for opportunity to publish => kill 'em
       let prevState = this._state
       this._state = STATE_CLOSED
-      this._terminateAllWaitingPublishers()
+      this._triggerWaiters(false)
       if (prevState != STATE_CLOSING) {
         this.emit('finish')
-      }
+      } // else finish is emitted from close waiter fn, see close()
       return true
     }
-    assert(this._buffer.length - this._totalWaiters > 0)
     return false
   }
 
@@ -344,23 +319,21 @@ export class Chan {
     assert(this._buffer.length > 0)
 
     if (this._state == STATE_CLOSING) {
-      assert(this._buffer[ this._buffer.length - 1 ].type == TYPE_CLOSE_WAITER)
-      return this._buffer[ this._buffer.length - 1 ].promise
+      assert(this._waiters.length > 0)
+      assert(this._waiters[ this._waiters.length - 1 ].promise != undefined)
+      return this._waiters[ this._waiters.length - 1 ].promise
     }
 
     let resolve, promise = new Promise(res => { resolve = res })
 
-    let item = { type: TYPE_CLOSE_WAITER, promise, fns: [resolve],
-      fnVal: undefined, fnErr: undefined }
-
-    item.fnVal = item.fnErr = () => {
+    let fn = () => {
       this.emit('finish')
-      callFns(item.fns)
+      resolve()
     }
 
-    this._buffer.push(item)
+    fn.promise = promise
+    this._waiters.push(fn)
     this._state = STATE_CLOSING
-    ++this._totalWaiters
 
     return promise
   }
@@ -372,7 +345,7 @@ export class Chan {
       this._terminateAllWaitingPublishers()
       if (prevState != STATE_CLOSING) {
         this.emit('finish')
-      }
+      } // else finish is emitted from close waiter fn, see close()
     }
   }
 
@@ -381,162 +354,83 @@ export class Chan {
     assert(this._buffer.length > 0)
 
     let item = this._buffer.shift()
-    let waiters
 
-    while (item && item.type > TYPE_ERROR) {
-      if (item.type == TYPE_WAITER) {
-        if (!waiters) {
-          waiters = [item]
-        } else {
-          waiters.push(item)
-        }
-        --this._totalWaiters
-      }
+    // skip all cancelled publishers
+    while (item && item.type == TYPE_CANCELLED) {
       item = this._buffer.shift()
     }
 
-    assert(this._totalWaiters >= 0)
-
     if (!item) {
-      // no value was produced, so return a list of waiters that should be notified
-      // that there is a waiting consumer after the latter is pushed on the list
       assert(this._buffer.length == 0)
       this._state = STATE_WAITING_FOR_PUBLISHER
-      return { item: FAILED, waiters: waiters }
+      return FAILED
     }
 
-    assert(item.type == TYPE_VALUE || item.type == TYPE_ERROR || item.type == TYPE_CLOSE_WAITER)
+    assert(item.type == TYPE_VALUE || item.type == TYPE_ERROR)
 
-    let closeWaiter = undefined
-
-    if (item.type == TYPE_CLOSE_WAITER) {
-      closeWaiter = item
-      item = FAILED
-    } else {
-      if (item.type == TYPE_VALUE) {
-        this._value = item.val
-      }
-      if (this._state == STATE_CLOSING && this._buffer.length == 1) {
-        // the only item left is the one containing closing listeners
-        closeWaiter = this._buffer.shift()
-      }
+    if (item.type == TYPE_VALUE) {
+      this._value = item.value
     }
 
-    if (closeWaiter) {
-      assert(this._state == STATE_CLOSING)
-      assert(this._buffer.length == 0)
-      assert(this._totalWaiters == 1)
-      assert(closeWaiter.type == TYPE_CLOSE_WAITER)
-      assert(closeWaiter.promise != undefined)
-      assert(closeWaiter.fnVal != undefined)
-      this._state = STATE_CLOSED
-      this._totalWaiters = 0
-      // the channel has closed, so notify all waiters for opportunity to publish
-      waiters && this._triggerWaiters(waiters, CLOSED, false)
-      // notify that the channel has closed
-      closeWaiter.fnVal()
-    } else if (waiters) {
-      // the value will be produced, so put all waiters for opportunity to publish
-      // back where they were before
-      this._prependWaiters(waiters)
-    }
-
-    return { item, waiters: undefined }
+    return item
   }
 
-  _sendToWaitingConsumer(val, isError) {
+  _sendToWaitingConsumer(value, isError) {
     assert(this._state == STATE_WAITING_FOR_PUBLISHER)
     assert(this._buffer.length > 0)
 
-    // skip all cancelled consumers, and collect all waiters
+    // skip all cancelled consumers
     let item = this._buffer.shift()
-    let waiters
 
-    while (item && !item.consumes) {
-      if (item.fnVal || item.fnErr) { // item is waiter; otherwise, item is a cancelled consumer
-        if (!waiters) {
-          waiters = [item]
-        } else {
-          waiters.push(item)
-        }
-        --this._totalWaiters
-      }
+    while (item && !(item.fnVal || item.fnErr)) {
       item = this._buffer.shift()
     }
 
-    assert(this._totalWaiters >= 0)
-
     if (!item) {
-      // the value wasn't consumed, so return a list of waiters that should be notified
-      // after the value have been pushed onto the buffer
       assert(this._buffer.length == 0)
       this._state = STATE_NORMAL
-      return waiters
-    }
-
-    // the value will be consumed, so put all waiters for opportunity to consume back
-    // where they were before
-    if (waiters) {
-      this._prependWaiters(waiters)
+      return false
     }
 
     if (this._buffer.length == 0) {
-      assert(this._totalWaiters == 0)
       this._state = STATE_NORMAL
     }
 
     if (isError) {
-      item.fnErr && item.fnErr(val)
+      item.fnErr && item.fnErr(value)
     } else {
-      this._value = val
-      item.fnVal && item.fnVal(val)
+      this._value = value
+      item.fnVal && item.fnVal(value)
     }
 
-    return SUCCESS
+    return true
   }
 
-  _triggerWaiters(waiters, val, isError) {
-    if (isError) {
-      for (let i = 0; i < waiters.length; ++i) {
-        let waiter = waiters[i]
-        waiter.fnErr && waiter.fnErr(val)
-      }
-    } else {
-      for (let i = 0; i < waiters.length; ++i) {
-        let waiter = waiters[i]
-        waiter.fnVal && waiter.fnVal(val)
-      }
+  _triggerWaiters(arg) {
+    let waiters = this._waiters
+    if (waiters.length) {
+      waiters = waiters.splice(0)
+      triggerWaiters(waiters, arg)
     }
-  }
-
-  _prependWaiters(waiters) {
-    for (let i = waiters.length - 1; i >= 0; --i) {
-      this._buffer.unshift(waiters[i])
-    }
-    this._totalWaiters += waiters.length
-    assert(this._totalWaiters <= this._buffer.length)
   }
 
   _terminateAllWaitingConsumers() {
-    assert(this._buffer.findIndex(x => x.consumes === undefined) == -1, 'no publishers')
-    this._totalWaiters = 0
-    while (this._buffer.length) {
-      let item = this._buffer.shift()
+    assert(this._buffer.findIndex(x => x.type !== undefined) == -1, 'no publishers')
+    let buf = this._buffer
+    for (let i = 0; i < buf.length; ++i) {
+      let item = buf[i]
       item.fnVal && item.fnVal(CLOSED)
     }
+    buf.length = 0
   }
 
   _terminateAllWaitingPublishers() {
-    assert(this._buffer.findIndex(x => x.consumes !== undefined) == -1, 'no consumers')
-    let triggerError = this._buffer.length - this._totalWaiters > 0
-    this._totalWaiters = 0
+    assert(this._buffer.findIndex(x => x.type === undefined) == -1, 'no consumers')
     let err = new Error('channel closed')
-    while (this._buffer.length) {
-      let item = this._buffer.shift()
+    let buf = this._buffer
+    for (let i = 0; i < buf.length; ++i) {
+      let item = buf[i]
       item.fnErr && item.fnErr(err)
-    }
-    if (triggerError) {
-      this.trigger('error', err)
     }
   }
 
@@ -551,6 +445,13 @@ export class Chan {
   get _stateName() {
     let names = ['STATE_NORMAL', 'STATE_WAITING_FOR_PUBLISHER', 'STATE_CLOSING', 'STATE_CLOSED']
     return names[ this._state ]
+  }
+}
+
+
+function triggerWaiters(waiters, arg) {
+  for (let i = 0; i < waiters.length; ++i) {
+    waiters[i](arg)
   }
 }
 
