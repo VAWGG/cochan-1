@@ -74,7 +74,8 @@ export class Chan {
       return false
     }
 
-    if (this._state == STATE_WAITING_FOR_PUBLISHER && this._sendToWaitingConsumer(value, isError)) {
+    let wasWaitingForPublisher = this._state == STATE_WAITING_FOR_PUBLISHER
+    if (wasWaitingForPublisher && this._sendToWaitingConsumer(value, isError)) {
       return true
     }
 
@@ -83,12 +84,14 @@ export class Chan {
     if (this._buffer.length < this._bufferSize) {
       this._buffer.push({ value, type: isError ? TYPE_ERROR : TYPE_VALUE,
         fnVal: undefined, fnErr: undefined })
-      // notify all waiters for opportunity to consume
-      this._triggerWaiters(true)
+      if (wasWaitingForPublisher) {
+        // notify all waiters for opportunity to consume
+        this._triggerWaiters(true)
+      }
       return true
     }
 
-    if (this._waiters.length) {
+    if (wasWaitingForPublisher && this._waiters.length) {
       // The publisher wasn't able to publish synchronously. Probably it will either start
       // waiting for the opportunity to do this again using maybeCanSendSync(), or will just
       // publish asynchronously using send(). The latter case is an opportunity to consume,
@@ -123,7 +126,8 @@ export class Chan {
       return nop
     }
 
-    if (this._state == STATE_WAITING_FOR_PUBLISHER && this._sendToWaitingConsumer(value, isError)) {
+    let wasWaitingForPublisher = this._state == STATE_WAITING_FOR_PUBLISHER
+    if (wasWaitingForPublisher && this._sendToWaitingConsumer(value, isError)) {
       fnOk(undefined)
       return nop
     }
@@ -141,7 +145,10 @@ export class Chan {
         fnVal: fnOk, fnErr: fnErr })
     }
 
-    this._triggerWaiters(true)
+    if (wasWaitingForPublisher) {
+      this._triggerWaiters(true)
+    }
+    
     return needsCancelFn ? () => { item.type = TYPE_CANCELLED } : nop
   }
 
@@ -153,11 +160,13 @@ export class Chan {
     assert(this._state == STATE_NORMAL || this._state == STATE_CLOSING)
     assert(this._state == STATE_NORMAL || this._buffer.length > 0)
 
-    let item = this._buffer.length == 0 ? FAILED : this._takeFromWaitingPublisher()
+    let item = this._takeFromWaitingPublisher()
     if (item === FAILED) {
-      if (this._state == STATE_CLOSING) {
-        this._close()
-      } else if (this._waiters.length) {
+      if (this._state == STATE_CLOSED) {
+        return false
+      }
+      assert(this._state == STATE_WAITING_FOR_PUBLISHER)
+      if (this._waiters.length && this._buffer.length <= this._bufferSize) {
         // The consumer wasn't able to consume synchronously. Probably it will either start
         // waiting for the opportunity to do this again using maybeCanTakeSync(), or will just
         // consume asynchronously using take(). The latter case is an opportunity to publish,
@@ -196,11 +205,10 @@ export class Chan {
       return nop
     }
 
-    if (this._state != STATE_WAITING_FOR_PUBLISHER && this._buffer.length) {
+    if (this._state != STATE_WAITING_FOR_PUBLISHER) {
       let item = this._takeFromWaitingPublisher()
       if (item === FAILED) {
-        if (this._state == STATE_CLOSING) {
-          this._close()
+        if (this._state == STATE_CLOSED) {
           fnVal && fnVal(CLOSED)
           return nop
         }
@@ -209,11 +217,7 @@ export class Chan {
         let fn = item.type == TYPE_VALUE ? fnVal : fnErr
         item.fnVal && item.fnVal() // this may change item.type to TYPE_CANCELLED
         fn && fn(item.value)
-        if (this._state == STATE_CLOSING) {
-          if (this._buffer.length == 0) {
-            this._close()
-          }
-        } else {
+        if (this._state != STATE_CLOSED && this._buffer.length < this._bufferSize) {
           this._triggerWaiters(true)
           this._needsDrain && this._emitDrain()
         }
@@ -221,7 +225,8 @@ export class Chan {
       }
     }
 
-    this._state = STATE_WAITING_FOR_PUBLISHER
+    assert(this._state == STATE_WAITING_FOR_PUBLISHER)
+
     let item = { fnVal, fnErr }
     this._buffer.push(item)
 
@@ -251,6 +256,7 @@ export class Chan {
     assert(this._state == STATE_NORMAL || this._state == STATE_WAITING_FOR_PUBLISHER)
 
     if (this._state == STATE_NORMAL) {
+      assert(this._buffer.length == 0)
       // there are (maybe) some waiters for opportunity to publish, but no actual publishers
       this._state = STATE_WAITING_FOR_PUBLISHER
       this._triggerWaiters(true)
@@ -351,7 +357,11 @@ export class Chan {
 
   _takeFromWaitingPublisher() {
     assert(this._state == STATE_NORMAL || this._state == STATE_CLOSING)
-    assert(this._buffer.length > 0)
+
+    if (this._buffer.length == 0) {
+      this._state = STATE_WAITING_FOR_PUBLISHER
+      return FAILED
+    }
 
     let item = this._buffer.shift()
 
@@ -362,7 +372,11 @@ export class Chan {
 
     if (!item) {
       assert(this._buffer.length == 0)
-      this._state = STATE_WAITING_FOR_PUBLISHER
+      if (this._state == STATE_CLOSING) {
+        this._close()
+      } else {
+        this._state = STATE_WAITING_FOR_PUBLISHER
+      }
       return FAILED
     }
 
@@ -377,11 +391,15 @@ export class Chan {
 
   _sendToWaitingConsumer(value, isError) {
     assert(this._state == STATE_WAITING_FOR_PUBLISHER)
-    assert(this._buffer.length > 0)
 
-    // skip all cancelled consumers
+    if (this._buffer.length == 0) {
+      this._state = STATE_NORMAL
+      return false
+    }
+
     let item = this._buffer.shift()
 
+    // skip all cancelled consumers
     while (item && !(item.fnVal || item.fnErr)) {
       item = this._buffer.shift()
     }
