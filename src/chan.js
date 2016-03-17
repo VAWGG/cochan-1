@@ -205,7 +205,8 @@ export class Chan {
       return nop
     }
 
-    if (this._state != STATE_WAITING_FOR_PUBLISHER) {
+    let prevState = this._state
+    if (prevState != STATE_WAITING_FOR_PUBLISHER) {
       let item = this._takeFromWaitingPublisher()
       if (item === FAILED) {
         if (this._state == STATE_CLOSED) {
@@ -230,9 +231,11 @@ export class Chan {
     let item = { fnVal, fnErr }
     this._buffer.push(item)
 
-    // notify all waiters for the opportunity to publish
-    this._triggerWaiters(true)
-    this._needsDrain && this._emitDrain() // TODO: probably not needed here
+    if (prevState == STATE_NORMAL) {
+      // notify all waiters for the opportunity to publish
+      this._triggerWaiters(true)
+      this._needsDrain && this._emitDrain() // TODO: probably not needed here
+    }
 
     return needsCancelFn ? () => { item.fnVal = item.fnErr = undefined } : nop
   }
@@ -281,10 +284,12 @@ export class Chan {
 
     if (this._state == STATE_WAITING_FOR_PUBLISHER) {
       // there are (maybe) some waiters for opportunity to consume, but no actual consumers
+      this._state = STATE_NORMAL
       this._triggerWaiters(true)
-      // waiters must be triggered not earlier than on the next tick
-      assert(this._state == STATE_WAITING_FOR_PUBLISHER)
     }
+
+    // waiters must be triggered not earlier than on the next tick
+    assert(this._state == STATE_NORMAL)
     
     return new Promise(resolve => this._waiters.push(resolve))
   }
