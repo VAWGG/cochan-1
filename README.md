@@ -31,6 +31,18 @@ be advanced until the last produced value is either consumed or buffered.
 [golang channels]: https://tour.golang.org/concurrency/2
 
 
+## Implementation status
+
+Not ready for producution until 1.0 is released. API and semantics may change, and there
+may be some bugs as the code is not covered by unit tests yet (TBD before 1.0).
+
+However, I encourage everybody who is interested in this project to play with examples
+and, maybe, try using cochan in some experimental or self-educational project. Please
+report any bugs you find and ask any questions you've got in the [issues].
+
+[issues]: https://github.com/skozin/cochan/issues
+
+
 ## Examples
 
 You can find all examples inside the [_examples](_examples) directory.
