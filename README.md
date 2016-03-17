@@ -36,18 +36,126 @@ be advanced until the last produced value is either consumed or buffered.
 Not ready for producution until 1.0 is released. API and semantics may change, and there
 may be some bugs as the code is not covered by unit tests yet (TBD before 1.0).
 
-However, I encourage everybody who is interested in this project to play with examples
-and, maybe, try using cochan in some experimental or self-educational project. Please
-report any bugs you find and ask any questions you've got in the [issues].
+However, I encourage you to play with examples and, maybe, try using the project in some
+experimental or self-educational work. Please report any bugs you find and ask any
+questions you've got in the [issues](https://github.com/skozin/cochan/issues).
 
-[issues]: https://github.com/skozin/cochan/issues
+
+## Quick demo
+
+This example demonstrates how to distribute some I/O work, e.g. querying FS, processing images
+using GraphicsMagick, uploading data to S3, etc., in a way that maintains the following nice
+properties:
+
+* No more than a configurable number of parallel operations are being processed at any given time.
+* The process of requesting new work can be potentially asynchronous, like querying some remote
+  service or message queue.
+* The process of consuming work results can be potentially asynchronous too, e.g. writing to
+  disk, db, or some remote service/queue.
+* New work gets requested only when it can be processed. Optionally, new work can be requested
+  in advance and buffered, with a reasonable upper bound, to minimize the amount of waiting for
+  new work to process.
+* Requesting and processing of new work stops until all current results are consumed. Optionally,
+  results can be buffered, with a reasonable upper bound, to minimize the amount of waiting for
+  current results consumption.
+* The whole process can be cancelled at any time, without leaking resources.
+
+This snippet shows ES7 async/await syntax, but it can be converted into ES6 with generators and
+[co][co] (or [Bluebird]'s [`Promise.coroutine`]) rather trivially, and even to plain Promises,
+albeit not so trivially.
+
+[co]: https://github.com/tj/co
+[`Promise.coroutine`]: http://bluebirdjs.com/docs/api/promise.coroutine.html
+[Bluebird]: https://github.com/petkaantonov/bluebird
+
+```js
+async function generateWork(ctx) {
+  let chNewWork = chan.fromPromise(ctx.requestWork())
+  let chCanSend = null
+  while (true) {
+    switch (await chan.select( chNewWork, chCanSend, ctx.cancel )) {
+      case chNewWork: // got new work
+        chCanSend = chan.fromPromise(ctx.work.maybeCanSendSync())
+      break
+      case chCanSend: // probably can send work
+        if (ctx.work.sendSync(chNewWork.value)) { // work sent, can request more
+          chNewWork = chan.fromPromise(ctx.requestWork())
+        } else {
+          chCanSend = chan.fromPromise(ctx.work.maybeCanSendSync())
+        }
+      break
+      case ctx.cancel:
+        console.log(`work generator cancelled, reason: ${ctx.cancel.value}`)
+        return
+    }
+  }
+}
+
+async function worker(ctx) {
+  let chWork = ctx.work
+  let chResult = null
+  let opSendResult = null
+  while (true) {
+    switch (await chan.select( chWork, chResult, opSendResult, ctx.cancel )) {
+      case chWork: // got new work
+        chResult = chan.fromPromise(ctx.performWork(chWork.value))
+        chWork = null // disable input chan until the work is done and sent
+      break
+      case chResult: // got work result
+        opSendResult = ctx.results.send(chResult.value)
+      break
+      case ctx.results: // result sent, can query more work
+        chWork = ctx.work
+        opSendResult = null
+      break
+      case ctx.cancel: // cancelled
+        console.log(`worker cancelled, reason: ${ctx.cancel.value}`)
+        return
+    }
+  }
+}
+
+function run(opts) {
+  let ctx = { opts.requestWork, opts.performWork,
+    work: new chan(Math.ceil(opts.maxParallel * opts.workBufferingRatio)),
+    results: new chan(Math.ceil(opts.maxParallel * opts.resultsBufferingRatio)),
+    cancel: chan.signal()
+  }
+  for (let i = 0; i < opts.maxParallel; ++i) {
+    worker(ctx).catch(opts.onError)
+  }
+  generateWork(ctx).catch(opts.onError)
+  return {
+    results: ctx.results,
+    cancel: (reason) => {
+      ctx.cancel.trigger(reason)
+      ctx.results.close()
+    }
+  }
+}
+
+let processor = run({
+  requestWork: requestSomeWork, // function that returns a Promise of new work
+  performWork: performSomeWork, // function that returns a Promise of result for a given work
+  maxParallel: 4,
+  workBufferingRatio: 1.5,
+  resultsBufferingRatio: 0,
+  onError: err => console.log(err.stack)
+})
+
+// processor.results is a channel with work results
+// call processor.cancel(reason) to cancel the whole process any time
+```
+
+Please see the [complete working example](_examples/async-await/00-demo.js).
 
 
 ## Examples
 
-You can find all examples inside the [_examples](_examples) directory.
-Run them by cloning this repo, doing `npm install` and then
-`./run-example _examples/path/to_example.js` (requires Node 4 or later).
+You can find all examples inside the [_examples](_examples) directory. Run them by cloning
+this repo, doing `npm install` and then `./run-example _examples/path/to_example.js`
+(requires Node 4 or later). The `run-example` script configures Node to transpile ES6/7
+syntax used in examples to a subset of ES6 suported in Node.js v4 (using Babel).
 
 There are three sub-directories inside `_examples`: `async-await`,
 `generators-co` and `promises`. Examples with the same name implement
@@ -654,7 +762,6 @@ ends, it will end (close) the channel too. This is a standard Streams behavior.
 
 ## TODO
 
-* Quick demo.
 * API docs.
 * Cover with tests.
 * Provide missing examples for `generators-co` and `plain-promises`.
