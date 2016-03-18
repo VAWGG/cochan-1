@@ -55,7 +55,6 @@ async function runTimeoutWithCustomMessage() {
 async function runSignal() {
   let ch = chan.signal()
   sleep(1000).then(() => ch.trigger(`optional value`))
-  p(`--  started consumption, waiting...`)
   await consume(ch, 5)
   p(`--  if we didn't limit iteration to 5 items, it would go infinitely`)
 }
@@ -65,6 +64,7 @@ async function runSignal() {
 //
 
 async function consume(ch, maxItems = Number.MAX_SAFE_INTEGER) {
+  p(`--  started consumption, waiting...`)
   let i = 0; while (++i <= maxItems) {
     let ret; try {
       ret = await ch.take()

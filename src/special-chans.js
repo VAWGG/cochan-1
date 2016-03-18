@@ -281,31 +281,39 @@ export class TimeoutChan extends SpecialChan { // mixins: DelayChanMixin, Always
 }
 
 
-// requires: init _isClosed = false, implement get _value, get _isError, get _isTriggered
+const STATE_PENDING = 0
+const STATE_FINISHED = 1
+const STATE_MANUALLY_CLOSED = 2
+
+// requires: init _state = STATE_PENDING, implement get _value, get _isError, get _isTriggered
 //
 class OneTimeChanMixin {
 
   get value() {
-    return this._isClosed ? this._value : undefined
+    return this._state == STATE_FINISHED ? this._value : undefined
   }
 
   get isClosed() {
-    return this._isClosed
+    return this._state > STATE_PENDING
   }
 
   get isActive() {
-    return !this._isClosed
+    return this._state == STATE_PENDING
   }
 
   get canTakeSync() {
-    return !this._isClosed && this._isTriggered
+    return this._state == STATE_PENDING && this._isTriggered
+  }
+
+  get isManuallyClosed() {
+    return this._state == STATE_MANUALLY_CLOSED
   }
 
   maybeCanTakeSync() {
     if (this.canTakeSync) {
       return P_RESOLVED_WITH_TRUE
     }
-    if (this._isClosed) {
+    if (this.isClosed) {
       return P_RESOLVED_WITH_FALSE
     }
     return new Promise(resolve => {
@@ -315,23 +323,31 @@ class OneTimeChanMixin {
   }
 
   takeSync() {
-    if (!this.canTakeSync) {
+    if (this.canTakeSync) {
+      this._close(false)
+      return true
+    } else {
       return false
     }
-    this._close()
-    return true
   }
 
   _take(fnVal, fnErr, needsCancelFn) {
-    if (this._isClosed) {
-      return fnVal && fnVal(CLOSED)
+    if (this.isClosed) {
+      fnVal && fnVal(CLOSED)
+      return nop
+    }
+    if (this._isTriggered) {
+      this._close(false)
+      let fn = this._isError ? fnErr : fnVal
+      fn && fn(this._value)
+      return nop
     }
     return this._addConsumer({ fnVal, fnErr, consumes: true }, needsCancelFn, 0)
   }
 
   closeSync() {
-    if (!this._isClosed) {
-      this._close()
+    if (this.isActive) {
+      this._close(true)
     }
     return true
   }
@@ -342,10 +358,13 @@ class OneTimeChanMixin {
   }
 
   closeNow() {
-    this.close()
+    this.closeSync()
   }
 
-  _closeIfSent() {
+  _trigger() {
+    if (this._state >= STATE_FINISHED) {
+      return
+    }
     if (this._isSubscribed) {
       this._unsubscribe()
     }
@@ -362,12 +381,12 @@ class OneTimeChanMixin {
       let cons = consumers.splice(cIndex, 1)[0]
       let fn = this._isError ? cons.fnErr : cons.fnVal
       fn && fn(this._value)
-      this._close()
+      this._close(false)
     }
   }
 
-  _close() {
-    this._isClosed = true
+  _close(manually) {
+    this._state = manually ? STATE_MANUALLY_CLOSED : STATE_FINISHED
     if (this._isSubscribed) {
       this._unsubscribe()
     }
@@ -386,9 +405,9 @@ export class DelayChan extends SpecialChan { // mixins: DelayChanMixin, OneTimeC
   constructor(ms, value, isError = false) {
     super()
     this._initDelayChanBase(ms)
+    this._state = STATE_PENDING
     this._value = value
     this._isError = isError
-    this._isClosed = false
   }
 
   get _isTriggered() {
@@ -396,9 +415,7 @@ export class DelayChan extends SpecialChan { // mixins: DelayChanMixin, OneTimeC
   }
 
   _timeout() {
-    if (!this._isClosed) {
-      this._closeIfSent()
-    }
+    this._trigger()
   }
 
   get _constructorName() {
@@ -410,7 +427,9 @@ export class DelayChan extends SpecialChan { // mixins: DelayChanMixin, OneTimeC
   }
 
   get _displayFlags() {
-    return this._isTriggered ? super._displayFlags + '!' : super._displayFlags
+    return this._isTriggered && !this.isManuallyClosed
+      ? super._displayFlags + '!'
+      : super._displayFlags
   }
 }
 
@@ -419,9 +438,9 @@ export class PromiseChan extends SpecialChan { // mixins: OneTimeChanMixin
 
   constructor(promise) {
     super()
+    this._state = STATE_PENDING
     this._value = undefined
     this._isError = false
-    this._isClosed = false
     this._promise = promise.then(v => this._onSettled(v, false), e => this._onSettled(e, true))
   }
 
@@ -431,11 +450,9 @@ export class PromiseChan extends SpecialChan { // mixins: OneTimeChanMixin
 
   _onSettled(value, isError) {
     this._promise = undefined
-    if (!this._isClosed) {
-      this._value = value
-      this._isError = isError
-      this._closeIfSent()
-    }
+    this._value = value
+    this._isError = isError
+    this._trigger()
   }
 
   get _isSubscribed() { return !!this._promise }
@@ -451,9 +468,9 @@ export class PromiseChan extends SpecialChan { // mixins: OneTimeChanMixin
   }
 
   get _displayFlags() {
-    return this._promise
-      ? super._displayFlags
-      : super._displayFlags + (this._isError ? 'E' : 'v')
+    return this._isTriggered && !this.isManuallyClosed
+      ? super._displayFlags + (this._isError ? 'E' : 'v')
+      : super._displayFlags
   }
 }
 
