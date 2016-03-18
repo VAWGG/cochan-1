@@ -23,6 +23,7 @@ Supported features:
 * Making channels from [iterables, iterators, generators](#iterables-iterators-and-generators)
   and [async generators](#async-generators)
 * [Piping Node.js streams into channels](#streams)
+* [Unidirectional channels](#unidirectional-channels)
 
 All supported operations respect and propagate backpressure, so, for example,
 if you make a chan from a generator function, the function's iterator won't
@@ -116,20 +117,25 @@ async function worker(ctx) {
 }
 
 function run(opts) {
-  let ctx = { opts.requestWork, opts.performWork,
-    work: chan(Math.ceil(opts.maxParallel * opts.workBufferingRatio)),
-    results: chan(Math.ceil(opts.maxParallel * opts.resultsBufferingRatio)),
+  let workBufferSize = Math.ceil(opts.maxParallel * opts.workBufferingRatio)
+  let resultsBufferSize = Math.ceil(opts.maxParallel * opts.resultsBufferingRatio)
+  let chResults = chan(resultsBufferSize)
+  let ctx = {
+    requestWork: opts.requestWork,
+    performWork: opts.performWork,
+    work: chan(workBufferSize),
+    results: chResults.sendOnly,
     cancel: chan.signal()
   }
   for (let i = 0; i < opts.maxParallel; ++i) {
-    worker(ctx).catch(opts.onError)
+    worker(i, ctx).catch(opts.onError)
   }
   generateWork(ctx).catch(opts.onError)
   return {
-    results: ctx.results,
+    results: chResults.takeOnly,
     cancel: (reason) => {
       ctx.cancel.trigger(reason)
-      ctx.results.close()
+      chResults.close()
     }
   }
 }
@@ -355,9 +361,6 @@ while (true) {
   }
 }
 ```
-
-> There is no `canTake` property, as you can always take a value from a channel.
-If the channel is closed, the taken value equals `chan.CLOSED`.
 
 Another pair of related functions are `maybeCanSendSync()` and `maybeCanTakeSync()`.
 They return a `Promise` that gets resolved when there is an opportunity to send/consume
@@ -758,6 +761,31 @@ ends, it will end (close) the channel too. This is a standard Streams behavior.
 
 > **Examples**:<br>
 > Piping a stream into a chan: [async-await](_examples/async-await/10-writable-stream.js).
+
+### Unidirectional channels
+
+Sometimes, you know that some code that you're giong to pass a channel to should only consume
+from that channel, or only produce into it. In such cases, for enforcing correctness you can
+convert the channel into a take-only or send-only one. This is done with `takeOnly` and
+`sendOnly` properties:
+
+```js
+let ch = chan()
+
+consumeFrom(ch.takeOnly)
+produceInto(ch.sendOnly)
+```
+
+These properties don't modify the original channel, but instead return a proxy that
+delegates all allowed operations to the original channel, and throw on any attempt
+to perform a prohibited operation.
+
+Take-only channels allow consuming from a channel, both synchronously and asynchronously.
+Send-only channels allow producing into a channel (sync & async), and closing a channel.
+
+> **Examples**:<br>
+> Unidirectional channels: [async-await](_examples/async-await/16-unidirectional.js).<br>
+> Demo: [async-await](_examples/async-await/00-demo.js).
 
 
 ## TODO

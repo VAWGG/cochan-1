@@ -1,5 +1,6 @@
 import {Chan} from './chan'
 import {SpecialChan, SignalChan, TimeoutChan, DelayChan, PromiseChan} from './special-chans'
+import {TakeOnlyChanProxy, SendOnlyChanProxy} from './unidirectional'
 import {EventEmitterMixin} from './event-emitter'
 import {Thenable} from './thenable'
 import {select, selectSync} from './select'
@@ -218,6 +219,10 @@ chan.setScheduler = function setScheduler({ microtask, macrotask }) {
 
 class ChanBaseMixin {
 
+  get canTake() {
+    return true
+  }
+
   take() {
     let promise = new Thenable(this, OP_TAKE)
     schedule.microtask(() => {
@@ -231,6 +236,20 @@ class ChanBaseMixin {
       }
     })
     return promise
+  }
+
+  get takeOnly() {
+    if (this._takeOnly) {
+      return this._takeOnly
+    }
+    return this._takeOnly = new TakeOnlyChanProxy(this)
+  }
+
+  get sendOnly() {
+    if (this._sendOnly) {
+      return this._sendOnly
+    }
+    return this._sendOnly = new SendOnlyChanProxy(this)
   }
 
   named(name) {
@@ -271,6 +290,8 @@ class ChanBaseMixin {
 
 
 ChanBaseMixin.prototype.CLOSED = CLOSED
+ChanBaseMixin.prototype._takeOnly = undefined
+ChanBaseMixin.prototype._sendOnly = undefined
 
 
 function fromIteratorWithOpts(iter, opts, defaults) {
@@ -303,3 +324,9 @@ mixin(Chan, EventEmitterMixin)
 
 mixin(SpecialChan, ChanBaseMixin.prototype)
 mixin(SpecialChan, EventEmitterMixin)
+
+mixin(TakeOnlyChanProxy, ChanBaseMixin.prototype)
+mixin(TakeOnlyChanProxy, EventEmitterMixin)
+
+mixin(SendOnlyChanProxy, ChanBaseMixin.prototype)
+mixin(SendOnlyChanProxy, EventEmitterMixin)

@@ -13,3 +13,10 @@ exports.p = function p(/* ...args */) {
 exports.sleep = function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
+
+exports.getOneLinerBody = function getOneLinerBody(fn) {
+  var lines = ('' + fn).split('\n')
+  return lines.length == 1
+    ? lines[0].replace(/^\([\w\d_]?\)\s*=>\s*|;\s*$/, '')
+    : lines[1].replace(/^\s*(?:return)?\s*|;\s*$/g, '')
+}

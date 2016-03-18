@@ -143,7 +143,6 @@ export class Thenable {
       }, op = ${ this._op == OP_TAKE ? 'take' :
          this._op == OP_SEND ? 'send ' + describeBox(this._sendData) : '<no>'
       }, result = ${ this._result ? describeBox(this._result) : '<no>'
-      }, rid = ${ this._reuseId
       }, seal = ${ this._isSealed ? 1 : 0
       })`
   }

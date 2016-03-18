@@ -58,21 +58,26 @@ async function worker(index, ctx) {
 }
 
 
-function run({ requestWork, performWork, maxParallel, workBufferingRatio, resultsBufferingRatio }) {
-  let ctx = { requestWork, performWork,
-    work: chan(Math.ceil(maxParallel * workBufferingRatio)),
-    results: chan(Math.ceil(maxParallel * resultsBufferingRatio)),
+function run(opts) {
+  let workBufferSize = Math.ceil(opts.maxParallel * opts.workBufferingRatio)
+  let resultsBufferSize = Math.ceil(opts.maxParallel * opts.resultsBufferingRatio)
+  let chResults = chan(resultsBufferSize)
+  let ctx = {
+    requestWork: opts.requestWork,
+    performWork: opts.performWork,
+    work: chan(workBufferSize),
+    results: chResults.sendOnly,
     cancel: chan.signal()
   }
-  for (let i = 0; i < maxParallel; ++i) {
-    worker(i, ctx).catch(onError)
+  for (let i = 0; i < opts.maxParallel; ++i) {
+    worker(i, ctx).catch(opts.onError)
   }
-  generateWork(ctx).catch(onError)
+  generateWork(ctx).catch(opts.onError)
   return {
-    results: ctx.results,
+    results: chResults.takeOnly,
     cancel: (reason) => {
       ctx.cancel.trigger(reason)
-      ctx.results.close()
+      chResults.close()
     }
   }
 }
@@ -84,12 +89,6 @@ async function consumeResults(ch) {
     await sleep(Math.random() > 0.9 ? 3000 : Math.floor(100 * Math.random()))
     console.log(`<-  result ${ch.value} consumed`)
   }
-}
-
-
-function onError(err) {
-  console.log(err.stack)
-  process.exit(1)
 }
 
 
@@ -119,7 +118,8 @@ let processor = run({
   performWork: performWork,
   maxParallel: 3,
   workBufferingRatio: 1.5,
-  resultsBufferingRatio: 0
+  resultsBufferingRatio: 0,
+  onError: err => { console.log(err.stack); process.exit(1) }
 })
 
 
