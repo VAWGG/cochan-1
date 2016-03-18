@@ -281,31 +281,31 @@ export class TimeoutChan extends SpecialChan { // mixins: DelayChanMixin, Always
 }
 
 
-// requires: init _closed = false, implement get _value, get _isError, get _isTriggered
+// requires: init _isClosed = false, implement get _value, get _isError, get _isTriggered
 //
 class OneTimeChanMixin {
 
   get value() {
-    return this._closed ? this._value : undefined
+    return this._isClosed ? this._value : undefined
   }
 
   get isClosed() {
-    return this._closed
+    return this._isClosed
   }
 
   get isActive() {
-    return !this._closed
+    return !this._isClosed
   }
 
   get canTakeSync() {
-    return !this._closed && this._isTriggered
+    return !this._isClosed && this._isTriggered
   }
 
   maybeCanTakeSync() {
     if (this.canTakeSync) {
       return P_RESOLVED_WITH_TRUE
     }
-    if (this._closed) {
+    if (this._isClosed) {
       return P_RESOLVED_WITH_FALSE
     }
     return new Promise(resolve => {
@@ -323,14 +323,14 @@ class OneTimeChanMixin {
   }
 
   _take(fnVal, fnErr, needsCancelFn) {
-    if (this._closed) {
+    if (this._isClosed) {
       return fnVal && fnVal(CLOSED)
     }
     return this._addConsumer({ fnVal, fnErr, consumes: true }, needsCancelFn, 0)
   }
 
   closeSync() {
-    if (!this._closed) {
+    if (!this._isClosed) {
       this._close()
     }
     return true
@@ -367,7 +367,7 @@ class OneTimeChanMixin {
   }
 
   _close() {
-    this._closed = true
+    this._isClosed = true
     if (this._isSubscribed) {
       this._unsubscribe()
     }
@@ -388,7 +388,7 @@ export class DelayChan extends SpecialChan { // mixins: DelayChanMixin, OneTimeC
     this._initDelayChanBase(ms)
     this._value = value
     this._isError = isError
-    this._closed = false
+    this._isClosed = false
   }
 
   get _isTriggered() {
@@ -396,7 +396,7 @@ export class DelayChan extends SpecialChan { // mixins: DelayChanMixin, OneTimeC
   }
 
   _timeout() {
-    if (!this._closed) {
+    if (!this._isClosed) {
       this._closeIfSent()
     }
   }
@@ -421,7 +421,7 @@ export class PromiseChan extends SpecialChan { // mixins: OneTimeChanMixin
     super()
     this._value = undefined
     this._isError = false
-    this._closed = false
+    this._isClosed = false
     this._promise = promise.then(v => this._onSettled(v, false), e => this._onSettled(e, true))
   }
 
@@ -431,7 +431,7 @@ export class PromiseChan extends SpecialChan { // mixins: OneTimeChanMixin
 
   _onSettled(value, isError) {
     this._promise = undefined
-    if (!this._closed) {
+    if (!this._isClosed) {
       this._value = value
       this._isError = isError
       this._closeIfSent()
