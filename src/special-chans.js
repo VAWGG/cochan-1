@@ -2,7 +2,7 @@ import assert from 'power-assert'
 import {EventEmitterMixin} from './event-emitter'
 import {nop, mixin} from './utils'
 import {CLOSED} from './constants'
-import {P_RESOLVED_WITH_FALSE, P_RESOLVED_WITH_TRUE} from './constants'
+import {P_RESOLVED_WITH_FALSE, P_RESOLVED_WITH_TRUE, P_RESOLVED} from './constants'
 
 
 // requires: implement get _isSubscribed, _subscribe(), _unsubscribe()
@@ -137,10 +137,11 @@ export class SignalChan extends SpecialChan { // mixins: AlwaysActiveChanMixin
     if (!this._isTriggered) {
       this._isTriggered = true
       this._value = value
-      let cons = this._consumers
+      let consumers = this._consumers
+      if (!consumers) return
       this._consumers = undefined
-      for (let i = 0; i < cons.length; ++i) {
-        cons[i](value)
+      for (let i = 0; i < consumers.length; ++i) {
+        consumers[i](value)
       }
     }
   }
@@ -243,12 +244,13 @@ export class TimeoutChan extends SpecialChan { // mixins: DelayChanMixin, Always
   }
 
   _timeout() {
-    let cons = this._consumers
+    let consumers = this._consumers
+    if (!consumers) return
     this._consumers = undefined
-    if (cons.length) {
+    if (consumers.length) {
       let err = this._makeError()
-      for (let i = 0; i < cons.length; ++i) {
-        cons[i](err)
+      for (let i = 0; i < consumers.length; ++i) {
+        consumers[i](err)
       }
     }
   }
@@ -347,15 +349,17 @@ class OneTimeChanMixin {
     if (this._isSubscribed) {
       this._unsubscribe()
     }
+    let consumers = this._consumers
+    if (!consumers) return
     let cIndex = -1
-    for (let i = 0; cIndex == -1 && i < this._consumers.length; ++i) {
-      let item = this._consumers[i]
+    for (let i = 0; cIndex == -1 && i < consumers.length; ++i) {
+      let item = consumers[i]
       if (item.consumes) {
         cIndex = i
       }
     }
     if (cIndex != -1) {
-      let cons = this._consumers.splice(cIndex, 1)[0]
+      let cons = consumers.splice(cIndex, 1)[0]
       let fn = this._isError ? cons.fnErr : cons.fnVal
       fn && fn(this._value)
       this._close()
@@ -367,8 +371,10 @@ class OneTimeChanMixin {
     if (this._isSubscribed) {
       this._unsubscribe()
     }
-    while (this._consumers.length) {
-      let {fnVal} = this._consumers.shift()
+    let consumers = this._consumers
+    if (!consumers) return
+    while (consumers.length) {
+      let {fnVal} = consumers.shift()
       fnVal && fnVal(CLOSED)
     }
   }
