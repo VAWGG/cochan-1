@@ -1,7 +1,7 @@
 import chan from '../../src'
 import {p} from '../utils'
 
-let ch = new chan()
+let ch = chan()
 
 async function producerThatRespectsBackpressure() {
   await ch.send('a')

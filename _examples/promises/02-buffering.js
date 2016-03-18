@@ -43,7 +43,7 @@ function consumer(ch) {
 }
 
 // allow buffering up to 3 items without blocking
-var ch = new chan(3)
+var ch = chan(3)
 
 Promise.resolve().then(function() {
   var items = [ 1, 2, 3, 4, 5 ]

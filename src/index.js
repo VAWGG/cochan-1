@@ -11,14 +11,81 @@ import {mixin, describeArray, describeValue, defaultTo, extend, nop} from './uti
 import {isIterator, isGenerator, isGeneratorFunction} from './utils'
 import schedule from './schedule'
 
-module.exports = Chan
-export default Chan
-export {thenableRunner}
+
+module.exports = chan; export default function chan(bufferSize = 0) {
+  return new Chan(bufferSize)
+}
+
+export {Chan}
+export {SpecialChan, SignalChan, TimeoutChan, DelayChan, PromiseChan}
+export {CLOSED, thenableRunner}
 
 
-const iteratorSymbol = 'function' === typeof Symbol
-  ? Symbol.iterator
-  : undefined
+chan.CLOSED = CLOSED
+
+
+chan.select = select
+chan.selectSync = selectSync
+
+/**
+ * Determines whether the passed value is a channel object.
+ */
+chan.isChan = function isChan(obj) {
+  return obj && obj._ischan === ISCHAN
+}
+
+/**
+ * Creates a signal channel, which is a special channel that yields nothing until it
+ * is triggered, and, after it gets triggered with some value, yields this value to
+ * all current and future consumers.
+ *
+ * Useful for communicating the same message to an arbitrary number of consumers.
+ *
+ * This channel never closes, and doesn't support sending values manually. Any attempt
+ * to send a value or close the channel will result in an error thrown.
+ */
+chan.signal = function signal(value) {
+  return new SignalChan(value)
+}
+
+/**
+ * Creates a timeout channel, which is a special channel that yields nothing until it
+ * is triggered, and, after it gets triggered with some message, yields an error with
+ * the specified message to all current and future consumers.
+ *
+ * Can be used inside `select` statement to enforce timeout on a set of operations.
+ *
+ * This channel never closes, and doesn't support sending values manually. Any attempt
+ * to send a value or close the channel will result in an error thrown.
+ */
+chan.timeout = function timeout(ms, message) {
+  return new TimeoutChan(ms, message)
+}
+
+/**
+ * Creates a channel that yields nothing until the specified number of milliseconds
+ * is passed, and, after that, produces exactly one value and then immediately closes.
+ *
+ * The value to produce may be specified in the optional second parameter, and defaults
+ * to undefined.
+ *
+ * This channel doesn't support sending values manually. Any attempt to do so will
+ * result in an error thrown.
+ */
+chan.delay = function delay(ms, value) {
+  return new DelayChan(ms, value)
+}
+
+/**
+ * Creates a channel that yields nothing until the specified Promise is settled, and,
+ * after that, produces exactly one value or error and then closes.
+ *
+ * This channel doesn't support sending values manually. Any attempt to do so will
+ * result in an error thrown.
+ */
+chan.fromPromise = function fromPromise(promise) {
+  return new PromiseChan(promise)
+}
 
 
 const MERGE_DEFAULTS = {
@@ -26,6 +93,26 @@ const MERGE_DEFAULTS = {
   closeOutput: true,
   bufferSize: 0
 }
+
+chan.merge = function merge(/* ...chans */) {
+  let chans = Array.apply(null, arguments)
+  let opts = chans[ chans.length - 1 ]
+  if (opts && opts.constructor === Object) {
+    chans.pop()
+  } else {
+    opts = MERGE_DEFAULTS
+  }
+  return mergeTo(
+    createChanIfUndefined(opts.output, opts.bufferSize, MERGE_DEFAULTS.bufferSize),
+    chans,
+    opts.closeOutput === undefined ? MERGE_DEFAULTS.closeOutput : !!opts.closeOutput
+  )
+}
+
+chan.merge.setDefaults = function merge$setDefaults(opts) {
+  extend(MERGE_DEFAULTS, opts)
+}
+
 
 const FROM_ITERABLE_DEFAULTS = {
   output: undefined,
@@ -35,6 +122,39 @@ const FROM_ITERABLE_DEFAULTS = {
   async: false
 }
 
+const ASYNC_DEFAULTS = { // applied when opts.async === true
+  runner: thenableRunner,
+  getRunnableType: thenableRunner.getRunnableType
+}
+
+const ASYNC_OFF = { // applied when Boolean(opts.async) == false
+  runner: undefined,
+  getRunnableType: undefined
+}
+
+const iteratorSymbol = 'function' === typeof Symbol
+  ? Symbol.iterator
+  : undefined
+
+chan.fromIterable = function fromIterable(iterable, opts) {
+  if (!iteratorSymbol) {
+    throw new TypeError('global.Symbol.iterator is required to use chan.fromIterable()')
+  }
+  if (!iterable || 'function' !== typeof iterable[ iteratorSymbol ]) {
+    throw new TypeError(`iterable must be an Iterable; got: ${ gen }`)
+  }
+  let iter = iterable[ iteratorSymbol ]()
+  if (!isIterator(iter)) {
+    throw new TypeError(`iter must be an iterator; got: ${ iter }`)
+  }
+  return fromIteratorWithOpts(iter, opts, FROM_ITERABLE_DEFAULTS)
+}
+
+chan.fromIterable.setDefaults = function fromIterable$setDefaults(opts) {
+  extend(FROM_ITERABLE_DEFAULTS, opts)
+}
+
+
 const FROM_ITERATOR_DEFAULTS = {
   output: undefined,
   closeOutput: true,
@@ -42,6 +162,18 @@ const FROM_ITERATOR_DEFAULTS = {
   sendRetval: false,
   async: false
 }
+
+chan.fromIterator = function fromIterator(iter, opts) {
+  if (!isIterator(iter)) {
+    throw new TypeError(`iter must be an iterator; got: ${ iter }`)
+  }
+  return fromIteratorWithOpts(iter, opts, FROM_ITERATOR_DEFAULTS)
+}
+
+chan.fromIterator.setDefaults = function fromIterator$setDefaults(opts) {
+  extend(FROM_ITERATOR_DEFAULTS, opts)
+}
+
 
 const FROM_GENERATOR_DEFAULTS = {
   output: undefined,
@@ -51,98 +183,40 @@ const FROM_GENERATOR_DEFAULTS = {
   async: false
 }
 
-const ASYNC_DEFAULTS = {
-  runner: thenableRunner,
-  getRunnableType: thenableRunner.getRunnableType
-}
-
-const ASYNC_OFF = {
-  runner: undefined,
-  getRunnableType: undefined
-}
-
-
-class ChanBase {
-
-  static isChan(obj) {
-    return obj && obj._ischan === ISCHAN
-  }
-
-  static setScheduler({ microtask, macrotask }) {
-    schedule.microtask = microtask || schedule.microtask
-    schedule.macrotask = macrotask || schedule.macrotask
-  }
-
-  static signal(value) {
-    return new SignalChan(value)
-  }
-
-  static timeout(ms, message) {
-    return new TimeoutChan(ms, message)
-  }
-
-  static delay(ms, value) {
-    return new DelayChan(ms, value)
-  }
-
-  static fromPromise(promise) {
-    return new PromiseChan(promise)
-  }
-
-  static merge(/* ...chans */) {
-    let chans = Array.apply(null, arguments)
-    let opts = chans[ chans.length - 1 ]
-    if (opts && opts.constructor === Object) {
-      chans.pop()
+chan.fromGenerator = function fromGenerator(gen, opts) {
+  if (!isIterator(gen)) {
+    if (isGeneratorFunction(gen)) {
+      gen = gen()
     } else {
-      opts = MERGE_DEFAULTS
+      throw new TypeError(`gen must be a generator function or an iterator; got: ${ gen }`)
     }
-    return mergeTo(
-      createChanIfUndefined(opts.output, opts.bufferSize, MERGE_DEFAULTS.bufferSize),
-      chans,
-      opts.closeOutput === undefined ? MERGE_DEFAULTS.closeOutput : !!opts.closeOutput
-    )
   }
+  return fromIteratorWithOpts(gen, opts, FROM_GENERATOR_DEFAULTS)
+}
 
-  static fromIterable(iterable, opts) {
-    if (!iteratorSymbol) {
-      throw new TypeError('global.Symbol.iterator is required to use chan.fromIterable()')
-    }
-    if (!iterable || 'function' !== typeof iterable[ iteratorSymbol ]) {
-      throw new TypeError(`iterable must be an Iterable; got: ${ gen }`)
-    }
-    let iter = iterable[ iteratorSymbol ]()
-    if (!isIterator(iter)) {
-      throw new TypeError(`iter must be an iterator; got: ${ iter }`)
-    }
-    return fromIteratorWithOpts(iter, opts, FROM_ITERABLE_DEFAULTS)
-  }
+chan.fromGenerator.setDefaults = function fromGenerator$setDefaults(opts) {
+  extend(FROM_GENERATOR_DEFAULTS, opts)
+}
 
-  static fromIterator(iter, opts) {
-    if (!isIterator(iter)) {
-      throw new TypeError(`iter must be an iterator; got: ${ iter }`)
-    }
-    return fromIteratorWithOpts(iter, opts, FROM_ITERATOR_DEFAULTS)
-  }
 
-  static fromGenerator(gen, opts) {
-    if (!isIterator(gen)) {
-      if (isGeneratorFunction(gen)) {
-        gen = gen()
-      } else {
-        throw new TypeError(`gen must be a generator function or an iterator; got: ${ gen }`)
-      }
-    }
-    return fromIteratorWithOpts(gen, opts, FROM_GENERATOR_DEFAULTS)
-  }
+/**
+ * Sets the object that replaces opts.async === true in
+ * fromIterable, fromIterator and fromGenerator.
+ */
+chan.setAsyncDefaults = function setAsyncDefaults(opts) {
+  extend(ASYNC_DEFAULTS, opts)
+}
 
-  /**
-   * Sets the object that replaces opts.async === true in
-   * fromIterable, fromIterator and fromGenerator.
-   */
-  static setAsyncDefaults(opts) {
-    extend(ASYNC_DEFAULTS, opts)
-  }
+/**
+ * Sets functions for scheduling micro- and macrotasks.
+ */
+chan.setScheduler = function setScheduler({ microtask, macrotask }) {
+  schedule.microtask = microtask || schedule.microtask
+  schedule.macrotask = macrotask || schedule.macrotask
+}
+
+
+class ChanBaseMixin {
 
   take() {
     let promise = new Thenable(this, OP_TAKE)
@@ -196,16 +270,7 @@ class ChanBase {
 }
 
 
-ChanBase.CLOSED = CLOSED
-ChanBase.prototype.CLOSED = CLOSED
-
-ChanBase.select = select
-ChanBase.selectSync = selectSync
-
-ChanBase.merge.setDefaults = (opts) => { extend(MERGE_DEFAULTS, opts) }
-ChanBase.fromIterable.setDefaults = (opts) => { extend(FROM_ITERABLE_DEFAULTS, opts) }
-ChanBase.fromIterator.setDefaults = (opts) => { extend(FROM_ITERATOR_DEFAULTS, opts) }
-ChanBase.fromGenerator.setDefaults = (opts) => { extend(FROM_GENERATOR_DEFAULTS, opts) }
+ChanBaseMixin.prototype.CLOSED = CLOSED
 
 
 function fromIteratorWithOpts(iter, opts, defaults) {
@@ -232,15 +297,9 @@ function createChanIfUndefined(chan, bufferSize, defaultBufferSize) {
 }
 
 
-const ChanBaseMixin = {
-  $static: ChanBase,
-  $proto: ChanBase.prototype
-}
-
-
-mixin(Chan, ChanBaseMixin)
+mixin(Chan, ChanBaseMixin.prototype)
 mixin(Chan, ChanWritableStreamMixin)
 mixin(Chan, EventEmitterMixin)
 
-mixin(SpecialChan, ChanBaseMixin)
+mixin(SpecialChan, ChanBaseMixin.prototype)
 mixin(SpecialChan, EventEmitterMixin)

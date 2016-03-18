@@ -18,7 +18,7 @@ const TYPE_CANCELLED = 2
 
 export class Chan {
 
-  constructor(bufferSize = 0) {
+  constructor(bufferSize) {
     this._initWritableStream()
     this._state = STATE_NORMAL
     this._bufferSize = bufferSize

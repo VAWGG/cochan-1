@@ -22,8 +22,8 @@ function worker(chIn, chOut) {
 }
 
 function run() {
-  let chA = new chan(5).named('A')
-  let chB = new chan(5).named('B')
+  let chA = chan(5).named('A')
+  let chB = chan(5).named('B')
 
   for (let item of 'XYZPQ') {
     chA.sendSync(item)

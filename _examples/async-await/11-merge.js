@@ -22,9 +22,9 @@ async function consumer(chA, chB, chC) {
 }
 
 function run() {
-  let chA = new chan(0)
-  let chB = new chan(2)
-  let chC = new chan(0)
+  let chA = chan(0)
+  let chB = chan(2)
+  let chC = chan(0)
   producer(chA, 'a', ['a-1', 'a-2']).catch(p)
   producer(chB, 'b', ['b-1', 'b-2', 'b-3']).catch(p)
   producer(chC, 'c', ['c-1', 'c-2']).catch(p)

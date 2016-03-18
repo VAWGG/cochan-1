@@ -33,7 +33,7 @@ async function consumer(ch) {
 }
 
 async function run() {
-  let ch = new chan(3)
+  let ch = chan(3)
   let items = 'bobrohata'.split('')
   let stream = new ProducerStream(items)
   stream.pipe(ch)

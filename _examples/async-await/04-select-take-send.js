@@ -53,8 +53,8 @@ async function run() {
   //
   // [producer]>--A-->[worker]>--B-->[consumer]
   //
-  let chA = new chan(0).named('A')
-  let chB = new chan(0).named('B')
+  let chA = chan(0).named('A')
+  let chB = chan(0).named('B')
 
   worker(chA, chB).catch(p)
   producer(chA, [ 'X', 'Y', 'Z', 'P', 'Q' ]).catch(p)

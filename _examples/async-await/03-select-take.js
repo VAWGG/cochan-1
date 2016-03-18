@@ -30,8 +30,8 @@ async function consumer(ch1, ch2) {
 }
 
 function run() {
-  let ch1 = new chan().named('chan 1')
-  let ch2 = new chan().named('chan 2')
+  let ch1 = chan().named('chan 1')
+  let ch2 = chan().named('chan 2')
 
   producer('1', ch1, [ 'a', 'b' ]).catch(p)
   producer('2', ch2, [ 'X', 'Y' ]).catch(p)

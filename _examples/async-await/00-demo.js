@@ -60,8 +60,8 @@ async function worker(index, ctx) {
 
 function run({ requestWork, performWork, maxParallel, workBufferingRatio, resultsBufferingRatio }) {
   let ctx = { requestWork, performWork,
-    work: new chan(Math.ceil(maxParallel * workBufferingRatio)),
-    results: new chan(Math.ceil(maxParallel * resultsBufferingRatio)),
+    work: chan(Math.ceil(maxParallel * workBufferingRatio)),
+    results: chan(Math.ceil(maxParallel * resultsBufferingRatio)),
     cancel: chan.signal()
   }
   for (let i = 0; i < maxParallel; ++i) {

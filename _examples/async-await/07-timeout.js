@@ -12,7 +12,7 @@ async function thread(index, chData, chTimeout) {
 }
 
 function run() {
-  let chData = new chan()
+  let chData = chan()
   let chTimeout = chan.timeout(1000, `my bear got ill`)
 
   thread(1, chData, chTimeout).catch(errorInThread(1))

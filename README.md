@@ -117,8 +117,8 @@ async function worker(ctx) {
 
 function run(opts) {
   let ctx = { opts.requestWork, opts.performWork,
-    work: new chan(Math.ceil(opts.maxParallel * opts.workBufferingRatio)),
-    results: new chan(Math.ceil(opts.maxParallel * opts.resultsBufferingRatio)),
+    work: chan(Math.ceil(opts.maxParallel * opts.workBufferingRatio)),
+    results: chan(Math.ceil(opts.maxParallel * opts.resultsBufferingRatio)),
     cancel: chan.signal()
   }
   for (let i = 0; i < opts.maxParallel; ++i) {
@@ -178,18 +178,18 @@ npm i -S cochan
 
 ### Basic operations
 
-To create a channel, use `new chan()`:
+To create a channel, use `chan()` function:
 
 ```js
 var chan = require('cochan')
-var ch = new chan()
+var ch = chan()
 ```
 
-The constructor accepts optional argument that sets the number of items that
+The function accepts optional argument that sets the number of items that
 this channel can buffer (defaults to `0`):
 
 ```js
-var bufferedCh = new chan(3)
+var bufferedCh = chan(3)
 ```
 
 To send a value to a channel, use `send(value)`:
@@ -276,7 +276,7 @@ ch.take().then(value => {
 For convenience, `chan.CLOSED` is also available via all chan instances:
 
 ```js
-var ch = new chan()
+var ch = chan()
 console.log(ch.CLOSED === chan.CLOSED) // true
 ```
 
@@ -292,7 +292,7 @@ ch.send('some value')
 When you use `closeNow()` function, all currently waiting sends will fail too:
 
 ```js
-var ch = new chan()
+var ch = chan()
 ch.send('some value')
   .then(() => console.log('sent'))
   .catch(err => console.log(err))
@@ -303,7 +303,7 @@ To test whether a channel can accept new values (i.e. not closed or closing), us
 `canSend` property:
 
 ```js
-var ch = new chan()
+var ch = chan()
 console.log(ch.canSend) // true
 
 ch.close()
@@ -650,7 +650,7 @@ function* $asyncGenerator(ch) {
   yield ch.send(result2)
 }
 
-let ch = new chan()
+let ch = chan()
 co($asyncGenerator(chan)).then(result => console.log(result))
 ```
 
@@ -664,7 +664,7 @@ async function asyncFn(ch) {
   await ch.send(result2)
 }
 
-let ch = new chan()
+let ch = chan()
 asyncFn(chan).then(result => console.log(result))
 ```
 
@@ -736,12 +736,12 @@ each normal channel is also a Streams3 writable stream:
 
 ```js
 function streamToChan(stream) {
-  var ch = new chan(5)
+  var ch = chan(5)
   ch.on('error', err => console.log(err))
   stream.pipe(ch)
   return ch
   // the shorter, but not so readable, version:
-  // return stream.pipe(new chan(5)).on('error', err => console.log(err))
+  // return stream.pipe(chan(5)).on('error', err => console.log(err))
 }
 ```
 

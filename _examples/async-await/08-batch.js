@@ -45,7 +45,7 @@ async function batchConsumerVariant(ch) {
 }
 
 async function run() {
-  let ch = new chan(3)
+  let ch = chan(3)
   let items = 'abcdef'.split('')
   batchProducer(items, ch).catch(p)
   await sleep(500)

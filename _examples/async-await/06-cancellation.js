@@ -9,7 +9,7 @@ async function thread(index, chData, chCancel) {
 }
 
 async function run() {
-  let chData = new chan()
+  let chData = chan()
   let chCancel = chan.signal()
 
   thread(1, chData, chCancel).catch(p)

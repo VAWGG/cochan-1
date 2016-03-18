@@ -22,7 +22,7 @@ async function consumer(ch) {
 
 async function run() {
   // allow buffering up to 3 items without blocking
-  let ch = new chan(3)
+  let ch = chan(3)
   let items = [ 1, 2, 3, 4, 5 ]
   producer(ch, items).catch(p)
   await sleep(500)

@@ -18,8 +18,8 @@ async function pipe(src, dst) {
 }
 
 async function run() {
-  let chInp = new chan(0)
-  let chOut = new chan(0)
+  let chInp = chan(0)
+  let chOut = chan(0)
   let chTimeout = chan.timeout(500)
 
   pipe(chOut, chInp).catch(p)
