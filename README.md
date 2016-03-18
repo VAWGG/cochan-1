@@ -800,5 +800,5 @@ Send-only channels allow producing into a channel (sync & async), and closing a 
 [npm-url]: https://npmjs.org/package/cochan
 [downloads-image]: http://img.shields.io/npm/dm/cochan.svg?style=flat-square
 [downloads-url]: https://npmjs.org/package/cochan
-[deps-image]: https://www.versioneye.com/nodejs/cochan/badge.svg?style=flat
-[deps-url]: https://www.versioneye.com/nodejs/cochan/
+[deps-image]: https://img.shields.io/david/skozin/cochan.svg?style=flat-square
+[deps-url]: https://david-dm.org/skozin/cochan/master
