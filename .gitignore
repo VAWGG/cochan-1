@@ -1,4 +1,6 @@
 /node_modules/
 /es6/
 /lib/
+/.nyc_output/
+/coverage/
 *.sublime-workspace
