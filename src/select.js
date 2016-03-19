@@ -27,6 +27,8 @@ export function selectSync(/* ...chans */) {
         if (arg._isSealed) {
           throw new Error(THENABLE_MULTIPLE_USE_MSG)
         }
+        assert(arg._op == OP_TAKE || arg._op == OP_SEND)
+        assert(arg._chan && arg._chan._ischan === ISCHAN)
         promise = arg
         chan = promise._chan
         op = promise._op
@@ -141,15 +143,16 @@ export function select(/* ...chans */) {
         if (!arg.isClosed) {
           subs.push({
             promise: undefined,
-            unsub: arg._take(v => onValue(v, arg), onTakeError, true)
+            unsub: arg._take(makeOnValue(arg, onValue), onTakeError, true)
           })
         }
       } else if (!arg._chan.isClosed) {
         assert(arg instanceof Thenable)
-        arg._addSub({
-          onFulfilled: v => onValue(v, arg._chan),
-          onRejected: e => onSendError(e, arg._chan)
-        })
+        arg._addSub(arg._op == OP_SEND
+          ? makeThenableSub(arg._chan, onValue, onSendError)
+          : { onFulfilled: makeOnValue(arg._chan, onValue),
+              onRejected: onTakeError
+          })
         subs.push({ promise: arg, unsub: undefined })
       }
     }
@@ -209,5 +212,16 @@ export function select(/* ...chans */) {
       }
     }
     arrayPool.put(subs)
+  }
+}
+
+function makeOnValue(chan, onValue) {
+  return v => onValue(v, chan)
+}
+
+function makeThenableSub(chan, onValue, onError) {
+  return {
+    onFulfilled: v => onValue(v, chan),
+    onRejected: e => onError(e, chan)
   }
 }
