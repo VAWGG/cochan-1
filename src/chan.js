@@ -120,7 +120,7 @@ export class Chan {
     return promise
   }
 
-  _send(value, isError, fnOk, fnErr, needsCancelFn) {
+  _send(value, isError, fnVal, fnErr, needsCancelFn) {
     if (this._state >= STATE_CLOSING) {
       fnErr(new Error('attempt to send into a closed channel'))
       return nop
@@ -128,7 +128,7 @@ export class Chan {
 
     let wasWaitingForPublisher = this._state == STATE_WAITING_FOR_PUBLISHER
     if (wasWaitingForPublisher && this._sendToWaitingConsumer(value, isError)) {
-      fnOk(undefined)
+      fnVal(value)
       return nop
     }
 
@@ -139,10 +139,10 @@ export class Chan {
     if (this._buffer.length < this._bufferSize) {
       this._buffer.push(item = { value, type: isError ? TYPE_ERROR : TYPE_VALUE,
         fnVal: undefined, fnErr: undefined })
-      fnOk(undefined)
+      fnVal(value)
     } else {
       this._buffer.push(item = { value, type: isError ? TYPE_ERROR : TYPE_VALUE,
-        fnVal: fnOk, fnErr: fnErr })
+        fnVal: fnVal, fnErr: fnErr })
     }
 
     if (wasWaitingForPublisher) {
@@ -190,7 +190,7 @@ export class Chan {
       this._needsDrain && this._emitDrain()
     }
 
-    item.fnVal && item.fnVal()
+    item.fnVal && item.fnVal(item.value)
 
     if (type == TYPE_ERROR) {
       throw item.value
@@ -216,7 +216,7 @@ export class Chan {
       } else {
         assert(item.type == TYPE_VALUE || item.type == TYPE_ERROR)
         let fn = item.type == TYPE_VALUE ? fnVal : fnErr
-        item.fnVal && item.fnVal() // this may change item.type to TYPE_CANCELLED
+        item.fnVal && item.fnVal(item.value) // this may change item.type to TYPE_CANCELLED
         fn && fn(item.value)
         if (this._state != STATE_CLOSED && this._buffer.length < this._bufferSize) {
           this._triggerWaiters(true)
