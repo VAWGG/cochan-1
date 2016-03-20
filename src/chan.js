@@ -134,22 +134,24 @@ export class Chan {
 
     assert(this._state == STATE_NORMAL)
 
-    let item
+    let cancel
 
     if (this._buffer.length < this._bufferSize) {
-      this._buffer.push(item = { value, type: isError ? TYPE_ERROR : TYPE_VALUE,
+      this._buffer.push({ value, type: isError ? TYPE_ERROR : TYPE_VALUE,
         fnVal: undefined, fnErr: undefined })
+      cancel = nop
       fnVal(value)
     } else {
-      this._buffer.push(item = { value, type: isError ? TYPE_ERROR : TYPE_VALUE,
-        fnVal: fnVal, fnErr: fnErr })
+      let item = { value, type: isError ? TYPE_ERROR : TYPE_VALUE, fnVal, fnErr }
+      cancel = () => this._cancelSend(item)
+      this._buffer.push(item)
     }
 
     if (wasWaitingForPublisher) {
       this._triggerWaiters(true)
     }
     
-    return needsCancelFn ? () => { item.type = TYPE_CANCELLED } : nop
+    return cancel
   }
 
   takeSync() {
@@ -363,35 +365,48 @@ export class Chan {
   _takeFromWaitingPublisher() {
     assert(this._state == STATE_NORMAL || this._state == STATE_CLOSING)
 
-    if (this._buffer.length == 0) {
+    let len = this._buffer.length
+    if (len == 0) {
       this._state = STATE_WAITING_FOR_PUBLISHER
       return FAILED
     }
 
     let item = this._buffer.shift()
+    --len
 
-    // skip all cancelled publishers
-    while (item && item.type == TYPE_CANCELLED) {
-      item = this._buffer.shift()
-    }
-
-    if (!item) {
-      assert(this._buffer.length == 0)
-      if (this._state == STATE_CLOSING) {
-        this._close()
-      } else {
-        this._state = STATE_WAITING_FOR_PUBLISHER
-      }
-      return FAILED
-    }
-
+    assert(item != undefined)
     assert(item.type == TYPE_VALUE || item.type == TYPE_ERROR)
 
     if (item.type == TYPE_VALUE) {
       this._value = item.value
     }
 
+    let bufferSize = this._bufferSize
+    if (bufferSize != 0 && len >= bufferSize) {
+      let bItem = this._buffer[ bufferSize - 1 ]
+      // need to re-create item to prevent _cancelSend from finding this item
+      this._buffer[ bufferSize - 1 ] = {
+        value: bItem.value, type: bItem.type,
+        fnVal: undefined, fnErr: undefined }
+      bItem.fnVal && bItem.fnVal(bItem.value)
+    }
+
     return item
+  }
+
+  _cancelSend(item) {
+    let buf = this._buffer
+    let index = buf.indexOf(item)
+    if (index == -1) return
+    // cannot be any other state as otherwise the send would not be blocked
+    assert(this._state == STATE_NORMAL || this._state == STATE_CLOSING)
+    // the send cannot be buffered
+    assert(index >= this._bufferSize)
+    buf.splice(index)
+    let len = buf.length
+    if (this._state == STATE_CLOSING && buf.length == 0) {
+      this._close()
+    }
   }
 
   _sendToWaitingConsumer(value, isError) {
