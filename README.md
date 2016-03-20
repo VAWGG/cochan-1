@@ -790,15 +790,18 @@ Send-only channels allow producing into a channel (sync & async), and closing a 
 
 ## Test coverage (WIP)
 
+Please note that Funcs and (probably) Branch coverage is currently
+incorrect (less than in reality) due to [an issue in nyc].
+
 ```
 ---------------------|----------|----------|----------|----------|
 File                 |  % Stmts | % Branch |  % Funcs |  % Lines |
 ---------------------|----------|----------|----------|----------|
- src/                |    22.42 |     9.55 |    20.41 |    22.62 |
-  chan.js            |    27.39 |       20 |    18.75 |    27.78 |
+ src/                |    28.17 |     16.1 |    24.49 |    28.21 |
+  chan.js            |    52.96 |    40.88 |    43.75 |    52.46 |
   constants.js       |    86.67 |      100 |      100 |    85.71 |
-  event-emitter.js   |    14.94 |        0 |        0 |    16.88 |
-  index.js           |    45.87 |     8.33 |       15 |    45.28 |
+  event-emitter.js   |    19.54 |     8.33 |     7.14 |    22.08 |
+  index.js           |    45.87 |    11.67 |       15 |    45.28 |
   iterator.js        |    13.25 |        0 |        0 |    13.58 |
   merge.js           |     9.57 |        0 |        0 |     9.82 |
   pool.js            |    37.93 |       25 |      100 |    37.93 |
@@ -806,14 +809,16 @@ File                 |  % Stmts | % Branch |  % Funcs |  % Lines |
   schedule.js        |    52.94 |       50 |       50 |    53.85 |
   select.js          |     7.69 |        0 |        0 |      7.2 |
   special-chans.js   |        7 |        0 |    33.33 |     7.22 |
-  thenable.js        |    45.68 |    26.09 |       75 |    45.68 |
+  thenable.js        |    51.85 |    34.78 |       75 |    51.85 |
   unidirectional.js  |      2.9 |        0 |       40 |      2.9 |
-  utils.js           |    54.41 |    19.23 |    16.67 |    55.22 |
+  utils.js           |    54.41 |    19.23 |       25 |    55.22 |
   writable-stream.js |     5.88 |        0 |       50 |     5.88 |
 ---------------------|----------|----------|----------|----------|
-All files            |    22.42 |     9.55 |    20.41 |    22.62 |
+All files            |    28.17 |     16.1 |    24.49 |    28.21 |
 ---------------------|----------|----------|----------|----------|
 ```
+
+[an issue in nyc]: https://github.com/bcoe/nyc/issues/198
 
 
 ## TODO
