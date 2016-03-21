@@ -381,14 +381,19 @@ export class Chan {
       this._value = item.value
     }
 
-    let bufferSize = this._bufferSize
-    if (bufferSize != 0 && len >= bufferSize) {
-      let bItem = this._buffer[ bufferSize - 1 ]
-      // need to re-create item to prevent _cancelSend from finding this item
-      this._buffer[ bufferSize - 1 ] = {
-        value: bItem.value, type: bItem.type,
-        fnVal: undefined, fnErr: undefined }
-      bItem.fnVal && bItem.fnVal(bItem.value)
+    if (len == 0 && this._state == STATE_CLOSING) {
+      this._close()
+    } else {
+      let bufferSize = this._bufferSize
+      if (bufferSize && len >= bufferSize) {
+        // buffer the most long-waiting publisher
+        let bItem = this._buffer[ bufferSize - 1 ]
+        // need to re-create item to prevent _cancelSend from finding this item
+        this._buffer[ bufferSize - 1 ] = {
+          value: bItem.value, type: bItem.type,
+          fnVal: undefined, fnErr: undefined }
+        bItem.fnVal && bItem.fnVal(bItem.value)
+      }
     }
 
     return item
