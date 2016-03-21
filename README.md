@@ -1,7 +1,9 @@
 # cochan
 
-[![NPM package version][npm-image]][npm-url]
+[![Build status][build-image]][build-url]
+[![Test coverage][coverage-image]][coverage-url]
 [![Dependencies][deps-image]][deps-url]
+[![NPM package version][npm-image]][npm-url]
 [![NPM Downloads][downloads-image]][downloads-url]
 
 Channel communication primitive, modelled after [golang channels]. Useful for
@@ -829,6 +831,10 @@ All files            |    34.53 |     21.4 |    28.77 |    34.71 |
 * Support [async iteration](https://github.com/tc39/proposal-async-iteration)?
 
 
+[build-image]: https://img.shields.io/travis/skozin/cochan.svg?style=flat-square
+[build-url]: https://travis-ci.org/skozin/cochan
+[coverage-image]: https://img.shields.io/coveralls/skozin/cochan.svg?style=flat-square
+[coverage-url]: https://coveralls.io/github/skozin/cochan
 [npm-image]: https://img.shields.io/npm/v/cochan.svg?style=flat-square
 [npm-url]: https://npmjs.org/package/cochan
 [downloads-image]: http://img.shields.io/npm/dm/cochan.svg?style=flat-square
