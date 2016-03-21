@@ -1,0 +1,159 @@
+import test from './helpers'
+import chan from '../src'
+
+test.timeout(1000)
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`#canSendSync is false when non-buffered chan has no outstanding receives`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan()
+  t.ok(ch.canSendSync == false)
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`#canSendSync is true when buffered chan's buffer is not full, and becomes false when it ` +
+     `gets full`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan(1)
+  t.ok(ch.canSendSync == true)
+  await ch.send('x')
+  t.ok(ch.canSendSync == false)
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`#canSendSync on a buffered chan becomes false only when both buffered values and the ones ` +
+     `from outstanding sends get consumed`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan(1)
+  ch.take()
+  ch.take()
+  await t.nextTick()
+  t.ok(ch.canSendSync == true)
+  await ch.send('x')
+  t.ok(ch.canSendSync == true)
+  await ch.send('y')
+  t.ok(ch.canSendSync == true)
+  await ch.send('y')
+  t.ok(ch.canSendSync == false)
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`#sendSync(value) sends value to a waiting consumer and returns true`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan()
+  let pRecv = ch.take()
+  await t.nextTick()
+  t.ok(ch.sendSync('x') == true)
+  t.ok(ch.canSendSync == false)
+  t.is('x', await pRecv)
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`#sendSync(value) buffers value and returns true`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan(1)
+  t.ok(ch.sendSync('x') == true)
+  t.ok(ch.canSendSync == false)
+  t.is('x', await ch.take())
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`#sendSync(value) can be used with #takeSync()`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan(1)
+  t.ok(ch.sendSync('x') == true)
+  t.ok(ch.takeSync() == true)
+  t.ok(ch.value == 'x')
+  t.ok(ch.takeSync() == false)
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`#sendSync(value) returns false and doesn't perform the send when it cannot do it ` +
+     `synchronously`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch1 = chan()
+
+  t.ok(ch1.sendSync('x') == false)
+  t.ok(ch1.canTakeSync == false)
+  t.ok(ch1.takeSync() == false)
+
+  let ch2 = chan(1)
+
+  ch2.sendSync('a')
+  t.ok(ch2.sendSync('b') == false)
+
+  t.ok(ch2.takeSync() == true && ch2.value == 'a')
+  t.ok(ch2.takeSync() == false)
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`#sendSync(value) returns false when called on a closed channel`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan()
+  ch.closeNow()
+  t.ok(ch.sendSync() == false)
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+//\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\//
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+function sendSync(ch, t, values) {
+  while (values.length) {
+    let value = values.shift()
+    if (!ch.sendSync(value)) {
+      return t.fail(`failed to send value: ${value}`)
+    }
+  }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`#sendSync(value) can be called in a loop to fill the buffer`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan(3)
+  sendSync(ch, t, [ 'a', 'b', 'c' ])
+  t.ok(ch.canSendSync == false)
+  t.is('a', await ch.take())
+  t.is('b', await ch.take())
+  t.is('c', await ch.take())
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`#sendSync(value) can be called in a loop to fullfill all outstanding receives`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan()
+  let recv = ''
+
+  ch.take().then(v => recv += v).catch(t.fail)
+  ch.take().then(v => recv += v).catch(t.fail)
+  
+  await t.nextTick()
+  
+  sendSync(ch, t, [ 'a', 'b' ])
+  t.ok(ch.canSendSync == false)
+  
+  await t.nextTick()
+  t.is('ab', recv)
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`#sendSync(value) can be called in a loop to fullfill all outstanding receives, and ` +
+     `then fill the buffer`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan(2)
+  let recv = ''
+
+  ch.take().then(v => recv += v).catch(t.fail)
+  ch.take().then(v => recv += v).catch(t.fail)
+  
+  await t.nextTick()
+  
+  sendSync(ch, t, [ 'a', 'b', 'c', 'd' ])
+  t.ok(ch.canSendSync == false)
+  
+  await t.nextTick()
+  t.is('ab', recv)
+
+  t.is('c', await ch.take())
+  t.is('d', await ch.take())
+})
