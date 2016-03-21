@@ -49,7 +49,47 @@ test(`buffered _send gets processed immediately and cannot be cancelled`, async 
 test(`buffered #send() can be immediately cancelled through the returned thenable`, async t => {
   let ch = chan(1)
   let thenable = ch.send('x')
+  thenable.then(t.fail.with(`send succeeded`)).catch(t.fail)
   thenable._op = 0
   ch.take().then(t.fail.with(`take succeeded: $$`)).catch(t.fail)
-  await t.sleep(100)
+  await t.sleep(50)
+})
+
+test(`blocked _take can be immediately cancelled`, async t => {
+  let ch = chan()
+  let cancel = ch._take(t.fail.with(`take succeeded: $$`), t.fail, true)
+  cancel()
+  ch.send('x').then(t.fail.with(`send succeeded`)).catch(t.fail)
+  await t.sleep(50)
+})
+
+test(`in presence of a waiting send, _take gets processed immediately and cannot be cancelled`,
+async t => {
+  let ch = chan()
+  let sent = false
+  let recv = false
+  ch._send('x', false, () => { sent = true }, t.fail, false)
+  let cancel = ch._take(() => { recv = true }, t.fail, true)
+  t.is(true, sent)
+  t.is(true, recv)
+  cancel()
+})
+
+test(`in presence of a buffered value, _take gets processed immediately and cannot be cancelled`,
+async t => {
+  let ch = chan(1)
+  let recv = false
+  await ch.send('x')
+  let cancel = ch._take(() => { recv = true }, t.fail, true)
+  t.is(true, recv)
+  cancel()
+})
+
+test(`#take() can be immediately cancelled through the returned thenable`, async t => {
+  let ch = chan(1)
+  await ch.send('x')
+  let thenable = ch.take()
+  thenable.then(t.fail.with(`take succeeded`)).catch(t.fail)
+  thenable._op = 0
+  await t.sleep(50)
 })
