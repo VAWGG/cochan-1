@@ -54,15 +54,6 @@ function _mixin(dst, src) {
 }
 
 
-export function repeat(x, n) {
-  let arr = new Array(n)
-  for (let i = 0; i < n; ++i) {
-    arr[i] = x
-  }
-  return arr
-}
-
-
 export function isThenable(obj) {
   return obj && 'function' === typeof obj.then
 }

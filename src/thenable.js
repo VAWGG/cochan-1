@@ -6,18 +6,6 @@ let nextId = 0|0
 
 export class Thenable {
 
-  static resolve(value, chan, op) {
-    let thenable = new Thenable(chan, op)
-    thenable._result = { value, isError: false }
-    return thenable
-  }
-
-  static reject(value, chan, op) {
-    let thenable = new Thenable(chan, op)
-    thenable._result = { value, isError: true }
-    return thenable
-  }
-
   constructor(chan, op) {
     if (DEBUG) {
       this._id = ++nextId

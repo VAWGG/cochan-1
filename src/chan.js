@@ -1,7 +1,7 @@
 import assert from 'power-assert'
 import schedule from './schedule'
 import {Thenable} from './thenable'
-import {repeat, nop} from './utils'
+import {nop} from './utils'
 import {CLOSED, FAILED, OP_SEND} from './constants'
 import {P_RESOLVED, P_RESOLVED_WITH_FALSE, P_RESOLVED_WITH_TRUE} from './constants'
 
