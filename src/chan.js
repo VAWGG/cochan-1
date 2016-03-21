@@ -497,10 +497,3 @@ function triggerWaiters(waiters, arg) {
     waiters[i](arg)
   }
 }
-
-
-function callFns(fns) {
-  for (let i = 0; i < fns.length; ++i) {
-    fns[i]()
-  }
-}
