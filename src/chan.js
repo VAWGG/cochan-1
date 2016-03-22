@@ -164,9 +164,6 @@ export class Chan {
 
     let item = this._takeFromWaitingPublisher()
     if (item === FAILED) {
-      if (this._state == STATE_CLOSED) {
-        return false
-      }
       assert(this._state == STATE_WAITING_FOR_PUBLISHER)
       if (this._waiters.length && this._buffer.length <= this._bufferSize) {
         // The consumer wasn't able to consume synchronously. Probably it will either start
@@ -210,12 +207,7 @@ export class Chan {
     let prevState = this._state
     if (prevState != STATE_WAITING_FOR_PUBLISHER) {
       let item = this._takeFromWaitingPublisher()
-      if (item === FAILED) {
-        if (this._state == STATE_CLOSED) {
-          fnVal && fnVal(CLOSED)
-          return nop
-        }
-      } else {
+      if (item !== FAILED) {
         assert(item.type == TYPE_VALUE || item.type == TYPE_ERROR)
         let fn = item.type == TYPE_VALUE ? fnVal : fnErr
         item.fnVal && item.fnVal(item.value) // this may change item.type to TYPE_CANCELLED
