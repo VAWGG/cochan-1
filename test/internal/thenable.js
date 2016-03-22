@@ -259,3 +259,20 @@ test(`sealed thenable can be unsealed`, async t => {
   ch.send(1)
   t.is(await th.then(), 1)
 })
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`sealed thenables _do_ release Zalgo`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan()
+  let sent = false
+  let th = ch.send(1)
+
+  th._seal(); th._addSub({
+    onFulfilled: () => { sent = true },
+    onRejected: t.fail
+  })
+
+  await t.nextTick()
+  ch.takeSync()
+  t.ok(true == sent)
+})
