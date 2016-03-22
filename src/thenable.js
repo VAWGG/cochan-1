@@ -92,10 +92,15 @@ export class Thenable {
     if (this._result) {
       return
     }
-    if (this._subs) {
+    this._result = { value, isError }
+    if (!this._subs) {
+      return
+    }
+    if (this._isSealed) {
+      this._notify()
+    } else {
       schedule.microtask(() => this._notify())
     }
-    this._result = { value, isError }
   }
 
   _notify() {
