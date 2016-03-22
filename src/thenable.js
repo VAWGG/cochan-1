@@ -1,3 +1,5 @@
+import assert from 'power-assert'
+import schedule from './schedule'
 import {OP_TAKE, OP_SEND, THENABLE_MIXED_USE_MSG} from './constants'
 import {arrayPool} from './pools'
 
@@ -11,7 +13,7 @@ export class Thenable {
       this._id = ++nextId
     }
     this._chan = chan
-    this._state = op|0 // _op = op, non-sealed, _reuseId = 0
+    this._state = op|0 // _op = op, non-sealed
   }
 
   then(onFulfilled, onRejected) {
@@ -77,39 +79,43 @@ export class Thenable {
   }
 
   _fulfill(value) {
-    this._result = { value, isError: false }
-    let subs = this._subs
-    if (!subs) {
-      return this
-    }
-    this._subs = undefined
-    if (subs.constructor === Object) {
-      subs.onFulfilled(value)
-      return this
-    }
-    for (let i = 0, l = subs.length; i < l; ++i) {
-      subs[i].onFulfilled(value)
-    }
-    arrayPool.put(subs)
+    this._settle(value, false)
     return this
   }
 
   _reject(value) {
-    this._result = { value, isError: true }
-    let subs = this._subs
-    if (!subs) {
-      return this
+    this._settle(value, true)
+    return this
+  }
+
+  _settle(value, isError) {
+    if (this._result) {
+      return
     }
+    if (this._subs) {
+      schedule.microtask(() => this._notify())
+    }
+    this._result = { value, isError }
+  }
+
+  _notify() {
+    assert(this._subs != undefined)
+    let {value, isError} = this._result
+    let subs = this._subs
     this._subs = undefined
     if (subs.constructor === Object) {
-      subs.onRejected(value)
-      return this
+      return isError ? subs.onRejected(value) : subs.onFulfilled(value)
     }
-    for (let i = 0, l = subs.length; i < l; ++i) {
-      subs[i].onRejected(value)
+    if (isError) {
+      for (let i = 0, l = subs.length; i < l; ++i) {
+        subs[i].onRejected(value)
+      }
+    } else {
+      for (let i = 0, l = subs.length; i < l; ++i) {
+        subs[i].onFulfilled(value)
+      }
     }
     arrayPool.put(subs)
-    return this
   }
 
   get _bound() {
