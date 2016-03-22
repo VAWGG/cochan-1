@@ -180,11 +180,7 @@ export class Chan {
     let type = item.type
     assert(type == TYPE_VALUE || type == TYPE_ERROR)
 
-    if (this._state == STATE_CLOSING) {
-      if (this._buffer.length == 0) {
-        this._close()
-      }
-    } else if (this._buffer.length < this._bufferSize) {
+    if (this._state < STATE_CLOSING && this._buffer.length < this._bufferSize) {
       this._triggerWaiters(true)
       this._needsDrain && this._emitDrain()
     }
@@ -304,12 +300,8 @@ export class Chan {
     }
     if (this._buffer.length == 0) {
       // there are no real publishers, only (maybe) waiters for opportunity to publish => kill 'em
-      let prevState = this._state
       this._state = STATE_CLOSED
       this._triggerWaiters(false)
-      if (prevState != STATE_CLOSING) {
-        this.emit('finish')
-      } // else finish is emitted from close waiter fn, see close()
       return true
     }
     return false
