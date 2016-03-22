@@ -180,12 +180,12 @@ export class Chan {
     let type = item.type
     assert(type == TYPE_VALUE || type == TYPE_ERROR)
 
+    item.fnVal && item.fnVal(item.value)
+
     if (this._state < STATE_CLOSING && this._buffer.length < this._bufferSize) {
       this._triggerWaiters(true)
       this._needsDrain && this._emitDrain()
     }
-
-    item.fnVal && item.fnVal(item.value)
 
     if (type == TYPE_ERROR) {
       throw item.value
@@ -233,7 +233,7 @@ export class Chan {
   _close() {
     assert(this._buffer.length == 0)
     this._state = STATE_CLOSED
-    this._triggerWaiters(false)
+    schedule.microtask(() => this._triggerWaiters(false))
   }
 
   maybeCanTakeSync() {
@@ -345,6 +345,7 @@ export class Chan {
       let prevState = this._state
       this._state = STATE_CLOSED
       this._terminateAllWaitingPublishers()
+      this._triggerWaiters(false)
       if (prevState != STATE_CLOSING) {
         this.emit('finish')
       } // else finish is emitted from close waiter fn, see close()
