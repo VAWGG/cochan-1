@@ -187,7 +187,7 @@ export class Chan {
       if (this._buffer.length == 0) {
         this._close()
       }
-    } else {
+    } else if (this._buffer.length < this._bufferSize) {
       this._triggerWaiters(true)
       this._needsDrain && this._emitDrain()
     }
@@ -220,7 +220,7 @@ export class Chan {
         let fn = item.type == TYPE_VALUE ? fnVal : fnErr
         item.fnVal && item.fnVal(item.value) // this may change item.type to TYPE_CANCELLED
         fn && fn(item.value)
-        if (this._state != STATE_CLOSED && this._buffer.length < this._bufferSize) {
+        if (this._state == STATE_NORMAL && this._buffer.length < this._bufferSize) {
           this._triggerWaiters(true)
           this._needsDrain && this._emitDrain()
         }
@@ -337,6 +337,12 @@ export class Chan {
       return this._waiters[ this._waiters.length - 1 ].promise
     }
 
+    assert(this._state == STATE_NORMAL)
+
+    this._state = STATE_CLOSING
+    // notify all send waiters that chan started closing
+    this._triggerWaiters(false)
+
     let resolve, promise = new Promise(res => { resolve = res })
 
     let fn = () => {
@@ -346,7 +352,6 @@ export class Chan {
 
     fn.promise = promise
     this._waiters.push(fn)
-    this._state = STATE_CLOSING
 
     return promise
   }
