@@ -75,8 +75,7 @@ test(`#close() waits until all waiting sends' values get consumed`, async t => {
   let closed = ch.close().then(_ => timeline += '.').catch(t.fail)
   assertClosing(ch, t)
 
-  await t.nextTick()
-
+  await t.nextTurn()
   t.is('', timeline)
   assertClosing(ch, t)
 
@@ -86,10 +85,36 @@ test(`#close() waits until all waiting sends' values get consumed`, async t => {
   assertClosing(ch, t)
 
   t.is('b', await ch.take())
+  assertClosed(ch, t)
+
+  await t.nextTick()
+  t.is('ab.', timeline)
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`#close() waits until all waiting sends' values get consumed (sync take)`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan()
+  let timeline = ''
+
+  ch.send('a').then(v => timeline += v).catch(t.fail)
+  ch.send('b').then(v => timeline += v).catch(t.fail)
   await t.nextTick()
 
-  t.is('ab.', timeline)
+  let closed = ch.close().then(_ => timeline += '.').catch(t.fail)
+  assertClosing(ch, t)
+
+  t.is(true, ch.takeSync())
+  t.is('a', ch.value)
+  assertClosing(ch, t)
+
+  t.is(true, ch.takeSync())
+  t.is('b', ch.value)
   assertClosed(ch, t)
+
+  t.is('', timeline)
+  await t.nextTick()
+  t.is('ab.', timeline)
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -106,24 +131,48 @@ test(`#close() waits until all buffered values get consumed`, async t => {
 
   let closed = ch.close().then(_ => closeUnblocked = true).catch(t.fail)
 
-  t.ok(closeUnblocked == false)
   assertClosing(ch, t)
-
-  await t.nextTick()
-
   t.ok(closeUnblocked == false)
+
+  await t.nextTurn()
+
   assertClosing(ch, t)
+  t.ok(closeUnblocked == false)
 
   t.is('x', await ch.take())
-  
   t.ok(closeUnblocked == false)
   assertClosing(ch, t)
 
   t.is('y', await ch.take())
-  await t.nextTick()
-
-  t.ok(closeUnblocked == true)
   assertClosed(ch, t)
+
+  await t.nextTick()
+  t.ok(closeUnblocked == true)
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`#close() waits until all buffered values get consumed (sync take)`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan(2)
+  let closeUnblocked = false
+
+  await ch.send('x')
+  await ch.send('y')
+
+  let closed = ch.close().then(_ => closeUnblocked = true).catch(t.fail)
+  assertClosing(ch, t)
+
+  t.ok(true == ch.takeSync())
+  t.ok('x' == ch.value)
+  t.ok(false == closeUnblocked)
+  assertClosing(ch, t)
+
+  t.ok(true == ch.takeSync())
+  t.ok('y' == ch.value)
+  assertClosed(ch, t)
+
+  await t.nextTick()
+  t.ok(true == closeUnblocked)
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
