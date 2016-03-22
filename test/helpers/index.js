@@ -65,6 +65,13 @@ export async function consume(ch, values = []) {
   return values
 }
 
+export async function consumeSync(ch, values = []) {
+  while (ch.takeSync()) {
+    values.push(ch.value)
+  }
+  return values
+}
+
 export function exec(fn) {
   return fn()
 }
@@ -106,13 +113,17 @@ function bindAssertions(t) {
   t.nextTurn = nextTurn
   t.nop = nop
   t.consume = t$consume
+  t.consumeSync = t$consumeSync
   t.ctx = t.context
   return t
 }
 
-function t$consume(t, ch) {
-  t.consumed = []
-  return consume(ch, t.consumed)
+function t$consume(ch, concat) {
+  return consume(ch, this.consumed = [])
+}
+
+function t$consumeSync(ch, concat) {
+  return consumeSync(ch, this.consumed = [])
 }
 
 function t$failWith(msg) {

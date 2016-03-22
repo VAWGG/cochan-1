@@ -66,7 +66,7 @@ test(`gets unblocked by a maybeCanTakeSync`, async t => {
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-test(`remains blocked after a send`, async t => {
+test(`remains blocked after sends`, async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
   let ch = chan()
   let unblockedWith = NOT_YET
@@ -109,7 +109,23 @@ test(`remains blocked after a sync take satisfied by a pending send`, async t =>
   t.ok(true == ch.takeSync())
   t.ok('x' == ch.value)
 
-  await t.nextTick()
+  await t.nextTurn()
+  t.ok(unblockedWith == NOT_YET)
+
+  await pSent
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`remains blocked after an unsuccessful synchronous close`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan(1)
+  let unblockedWith = NOT_YET
+  
+  ch.sendSync('x')
+  ch.maybeCanSendSync().then(v => unblockedWith = v).catch(t.fail)
+  t.ok(false == ch.closeSync())
+
+  await t.nextTurn()
   t.ok(unblockedWith == NOT_YET)
 })
 
@@ -123,6 +139,39 @@ test(`gets unblocked with false when chan gets closed`, async t => {
   await ch.close()
 
   t.ok(unblockedWith == false)
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`gets unblocked with false when chan gets synchronously closed`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan()
+  let unblockedWith = NOT_YET
+  
+  ch.maybeCanSendSync().then(v => unblockedWith = v).catch(t.fail)
+  t.ok(true == ch.closeSync())
+
+  await t.nextTurn()
+  t.ok(unblockedWith == false)
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`gets unblocked with false when chan gets immediately closed`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan()
+  let unblockedWith = NOT_YET
+  let sendError = NOT_YET
+
+  ch.send('x').then(t.fail.with(`send succeeded`)).catch(e => sendError = e)
+  await t.nextTick()
+  
+  ch.maybeCanSendSync().then(v => unblockedWith = v).catch(t.fail)
+
+  ch.closeNow()
+  t.ok(true == ch.isClosed)
+
+  await t.nextTurn()
+  t.ok(unblockedWith == false)
+  t.ok((sendError instanceof Error) && /closed/.test(sendError.message))
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

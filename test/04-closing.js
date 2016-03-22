@@ -36,6 +36,70 @@ async t => {
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`#closeSync() closes the chan and returns true in the absence of buffered values ` +
+  `or waiting sends`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch1 = chan(0)
+  let ch2 = chan(1)
+
+  assertActive(ch1, t)
+  assertActive(ch2, t)
+
+  t.is(true, ch1.closeSync())
+  t.is(true, ch2.closeSync())
+
+  assertClosed(ch1, t)
+  assertClosed(ch2, t)
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`#closeSync() does nothing and returns false if there are pending sends`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan()
+  let timeline = ''
+
+  ch.send('a').then(v => timeline += v).catch(t.fail)
+  ch.send('b').then(v => timeline += v).catch(t.fail)
+
+  await t.nextTick()
+
+  t.is(false, ch.closeSync())
+  assertActive(ch, t)
+
+  await t.nextTurn()
+  t.is('', timeline)
+  assertActive(ch, t)
+
+  t.consumeSync(ch)
+  t.is('ab', t.consumed.join(''))
+
+  await t.nextTick()
+  t.is('ab', timeline)
+  assertActive(ch, t)
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`#closeSync() does nothing and returns false if there are buffered values`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan(2)
+
+  ch.sendSync('a')
+  ch.sendSync('b')
+
+  t.is(false, ch.closeSync())
+  assertActive(ch, t)
+  
+  await t.nextTurn()
+  assertActive(ch, t)
+
+  t.consumeSync(ch)
+  t.is('ab', t.consumed.join(''))
+
+  await t.nextTick()
+  assertActive(ch, t)
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 test(`#close() waits until all waiting sends' values get consumed`, async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
   let ch = chan()
@@ -263,6 +327,23 @@ test(`#close() resolves all pending receives with chan.CLOSED`, async t => {
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`#closeSync() resolves all pending receives with chan.CLOSED`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan()
+  let events = []
+
+  ch.take().then(v => events.push('take1', v)).catch(t.fail)
+  ch.take().then(v => events.push('take2', v)).catch(t.fail)
+
+  await t.nextTick()
+  t.is(true, ch.closeSync())
+  assertClosed(ch, t)
+
+  await t.nextTick()
+  t.same(events, [ 'take1', ch.CLOSED, 'take2', ch.CLOSED ])
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 test(`sending into a closed channel results in an error`, async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
   let ch = chan()
@@ -317,29 +398,63 @@ test(`#closeNow() resolves all pending receives with chan.CLOSED`, async t => {
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-test(`#closeNow() can be used on a closing channel`, async t => {
+test(`#closeNow() immediately closes a closing buffered chan`, async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-  let ch1 = chan(0)
-  let ch2 = chan(1)
+  let ch = chan(1)
+  let closed = false
 
-  ch1.send('x')
-  await ch2.send('y')
+  ch.sendSync('y')
 
-  ch1.close()
-  ch2.close()
+  ch.close().then(_ => closed = true).catch(t.fail)
+  assertClosing(ch, t)
 
-  assertClosing(ch1, t)
-  assertClosing(ch2, t)
+  ch.closeNow()
+  assertClosed(ch, t)
 
-  ch1.closeNow()
-  ch2.closeNow()
-
-  assertClosed(ch1, t)
-  assertClosed(ch2, t)
+  await t.nextTick()
+  t.ok(true == closed)
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-test(`#close() and #closeNow() can be used on a closed channel`, async t => {
+test(`#closeNow() immediately closes a closing non-buffered chan, and resolved all waiting ` +
+  `sends with an error`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan(0)
+  let sendError = { noError: 1 }
+  let closed = false
+
+  ch.send('x').then(t.fail.with(`send succeeded`)).catch(e => sendError = e)
+  await t.nextTick()
+
+  ch.close().then(_ => closed = true).catch(t.fail)
+  assertClosing(ch, t)
+
+  ch.closeNow()
+  assertClosed(ch, t)
+
+  await t.nextTick()
+  t.ok(true == closed)
+  t.ok((sendError instanceof Error) && /closed/.test(sendError.message))
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`#closeSync() does nothing and returns false if chan is closing`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan()
+  let sent = { notYet: 1 }
+
+  ch.send('x').then(v => sent = v).catch(t.fail)
+  await t.nextTick()
+
+  t.is(false, ch.closeSync())
+  assertActive(ch, t)
+
+  t.is('x', await ch.take())
+  assertActive(ch, t)
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`#close(), #closeNow() and #closeSync() can be used on a closed channel`, async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
   let ch = chan()
 
@@ -349,7 +464,7 @@ test(`#close() and #closeNow() can be used on a closed channel`, async t => {
   await ch.close()
   assertClosed(ch, t)
 
-  ch.closeNow()
+  t.is(true, ch.closeSync())
   assertClosed(ch, t)
 })
 

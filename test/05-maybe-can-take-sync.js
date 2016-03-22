@@ -212,8 +212,39 @@ test(`returns false when chan gets closed`, async t => {
   ch.maybeCanTakeSync().then(v => unblockedWith = v).catch(t.fail)
 
   await ch.close()
-  await t.nextTurn()
+  t.ok(true == ch.isClosed)
 
+  await t.nextTurn()
+  t.ok(unblockedWith == false)
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`returns false when chan gets synchronously closed`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan()
+  let unblockedWith = NOT_YET
+
+  ch.maybeCanTakeSync().then(v => unblockedWith = v).catch(t.fail)
+
+  t.ok(true == ch.closeSync())
+  t.ok(true == ch.isClosed)
+
+  await t.nextTurn()
+  t.ok(unblockedWith == false)
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`returns false when chan gets immediately closed`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan()
+  let unblockedWith = NOT_YET
+
+  ch.maybeCanTakeSync().then(v => unblockedWith = v).catch(t.fail)
+
+  ch.closeNow()
+  t.ok(true == ch.isClosed)
+
+  await t.nextTurn()
   t.ok(unblockedWith == false)
 })
 
@@ -242,9 +273,8 @@ test(`doesn't interfere with chan closing`, async t => {
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-test(`returns false when chan is closed at the time of the call`,
+test(`returns false when chan is already closed`, async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-async t => {
   let ch = chan()
   ch.closeNow()
   t.is(false, await ch.maybeCanTakeSync())
