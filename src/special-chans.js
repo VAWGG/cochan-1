@@ -1,4 +1,5 @@
 import assert from 'power-assert'
+import schedule from './schedule'
 import {EventEmitterMixin} from './event-emitter'
 import {nop, mixin} from './utils'
 import {CLOSED} from './constants'
@@ -185,12 +186,12 @@ class DelayChanMixin {
   _subscribe(now) {
     assert(!this._isSubscribed)
     let delay = Math.max(0, this._timeoutDate - (now || Date.now()))
-    this._tid = setTimeout(this._timeoutBound, delay)
+    this._tid = schedule.setTimeout(this._timeoutBound, delay)
   }
 
   _unsubscribe() {
     assert(this._isSubscribed)
-    clearTimeout(this._tid)
+    schedule.clearTimeout(this._tid)
     this._tid = undefined
   }
 }

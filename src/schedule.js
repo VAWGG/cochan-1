@@ -8,7 +8,9 @@ const isNode = 'undefined' !== typeof process
 const schedule = {
   // See: https://github.com/YuzuJS/setImmediate/blob/master/README.md#macrotasks-and-microtasks
   macrotask: undefined,
-  microtask: undefined
+  microtask: undefined,
+  setTimeout: setTimeout,
+  clearTimeout: clearTimeout
 }
 
 export default schedule
