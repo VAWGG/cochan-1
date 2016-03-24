@@ -537,6 +537,6 @@ test(`the op to perform gets selected randomly between those which can be perfor
 })
 
 function randomInsert(value, array) {
-  let i = Math.floor(array.length * Math.random())
+  let i = Math.floor((array.length + 1) * Math.random())
   array.splice(i, 0, value)
 }
