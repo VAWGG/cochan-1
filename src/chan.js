@@ -390,6 +390,9 @@ export class Chan {
   }
 
   _cancelSend(item) {
+    if (this._state == STATE_CLOSED) {
+      return
+    }
     let buf = this._buffer
     let index = buf.indexOf(item)
     if (index == -1) return
@@ -465,6 +468,7 @@ export class Chan {
       let item = buf[i]
       item.fnErr && item.fnErr(err)
     }
+    this._buffer.length = 0
   }
 
   get _constructorName() {
