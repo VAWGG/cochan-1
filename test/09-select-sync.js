@@ -128,6 +128,68 @@ test(`returns null given send op on a closing chan`, async t => {
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`returns chan.CLOSED and doesn't perform any op if all non-timeout chans are closed (case 1)`,
+  async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan()
+  let tch = chan.timeout(0)
+
+  ch.closeSync()
+  await t.sleep(10)
+
+  let sel = chan.selectSync( ch.take(), tch )
+
+  t.ok(sel === chan.CLOSED)
+})
+
+test(`returns chan.CLOSED and doesn't perform any op if all non-timeout chans are closed (case 2)`,
+async t => {
+  let ch = chan()
+  let tch1 = chan.timeout(0)
+  let tch2 = chan.timeout(0)
+
+  ch.closeSync()
+  await t.sleep(10)
+
+  let sel = chan.selectSync( tch1.take(), ch.take(), tch2 )
+  t.ok(sel === chan.CLOSED)
+})
+
+test(`returns chan.CLOSED and doesn't perform any op if all non-timeout chans are closed (case 3)`,
+async t => {
+  let ch1 = chan()
+  let ch2 = chan()
+
+  let tch1 = chan.timeout(0)
+  let tch2 = chan.timeout(0)
+
+  ch1.closeSync()
+  ch2.closeSync()
+
+  await t.sleep(10)
+
+  let sel = chan.selectSync( tch1.take(), ch1.take(), tch2.take(), ch2.send('x') )
+  t.ok(sel === chan.CLOSED)
+})
+
+test(`returns chan.CLOSED and doesn't perform any op if all non-timeout chans are closed (case 4)`,
+async t => {
+  let ch1 = chan()
+  let ch2 = chan()
+
+  let tch1 = chan.timeout(0)
+  let tch2 = chan.timeout(0)
+
+  ch1.closeSync()
+  ch2.closeSync()
+
+  await t.sleep(10)
+
+  let sel = chan.selectSync( false, tch1.take(), ch1.take(), null, tch2.take(), ch2.send('x'), 0 )
+  t.ok(sel === chan.CLOSED)
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 test(`throws given any arg that is not falsy, chan, or op`, async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
   let ch = chan()
@@ -186,6 +248,58 @@ test(`throws when the same op instance gets passed in two selectSync operations`
 
   await t.nextTurn()
   t.ok(false == chY.takeSync()) // chY.send('e') was not performed
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`in the presence of non-closed non-timeout chans, throws given a take on a timeout chan ` +
+  `that can be performed sync (case 1)`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan()
+  let tch = chan.timeout(0)
+  await t.sleep(10)
+  t.throws(() => chan.selectSync( ch.take(), tch.take() ), /timeout/)
+})
+
+test(`in the presence of non-closed non-timeout chans, throws given a take on a timeout chan ` +
+  `that can be performed sync (case 2)`,
+async t => {
+  let ch = chan()
+  let tch1 = chan.timeout(0, 'alas')
+  let tch2 = chan.timeout(100000, 'oops')
+  await t.sleep(10)
+  t.throws(() => chan.selectSync( ch.take(), tch1.take(), tch2 ), /alas/)
+})
+
+test(`throws given a take on a timeout chan that can be performed sync, even if other ops ` +
+  `on a non-timeout chans can be performed sync too (case 1)`,
+async t => {
+  let ch = chan(1)
+  let tch = chan.timeout(0)
+  await t.sleep(10)
+  // to fight potential randomness of op selection
+  for (let i = 0; i < 10; ++i) {
+    t.throws(() => chan.selectSync( ch.send('e'), tch ), /timeout/)
+  }
+  t.ok(true == ch.sendSync('x'))
+})
+
+test(`throws given a take on a timeout chan that can be performed sync, even if other ops ` +
+  `on a non-timeout chans can be performed sync too (case 1)`,
+async t => {
+  let ch1 = chan(1)
+  let ch2 = chan(1)
+  let tch = chan.timeout(0)
+
+  ch2.send('x')
+  await t.sleep(10)
+
+  // to fight potential randomness of op selection
+  for (let i = 0; i < 10; ++i) {
+    t.throws(() => chan.selectSync( ch1.send('e'), tch, ch2.take() ), /timeout/)
+  }
+
+  t.ok(true == ch1.sendSync('x'))
+  t.ok(true == ch2.takeSync())
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -622,4 +736,19 @@ test(`the op to perform gets selected randomly between those which can be perfor
   if (variance >= 0.001) {
     t.fail(`the choice of the op is not random, variance: ${ variance.toFixed(4) }`)
   }
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`throws if the sync op that was chosen yields error (case 1)`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan(1)
+  ch.sendErrorSync(new Error(`some weird error`))
+  t.throws(() => chan.selectSync( ch.take() ), /some weird error/)
+})
+
+test(`throws if the sync op that was chosen yields error (case 2)`, async t => {
+  let ch1 = chan(1)
+  let ch2 = chan(1)
+  ch1.sendErrorSync(new Error(`some weird error`))
+  t.throws(() => chan.selectSync( ch1.take(), ch2.take() ), /some weird error/)
 })

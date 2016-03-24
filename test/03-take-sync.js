@@ -148,3 +148,11 @@ test(`#takeSync() can be called in a loop to consume all buffered values, and th
   t.ok(recv == 'abcd')
   await sent
 })
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`#takeSync() throws when the value consumed is an error`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan(1)
+  await ch.sendError(new Error('haba haba'))
+  t.throws(() => ch.takeSync(), /haba haba/)
+})

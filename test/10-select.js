@@ -388,8 +388,8 @@ for (let N = 1; N <= 4; ++N) test(`given one send and one take op, both of which
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-test(`when the only chan get closed before any op can be executed, yields chan.CLOSED ` +
-  `(take op)`, async t => {
+test(`when the only chan gets closed before any op can be executed, yields chan.CLOSED (take op)`,
+  async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
   let ch = chan()
   let sel = NOT_YET
@@ -406,8 +406,7 @@ test(`when the only chan get closed before any op can be executed, yields chan.C
   t.ok(chan.CLOSED == sel)
 })
 
-test(`when the only chan get closed before any op can be executed, yields chan.CLOSED ` +
-  `(send op)`,
+test(`when the only chan gets closed before any op can be executed, yields chan.CLOSED (send op)`,
 async t => {
   let ch = chan()
   let sel = NOT_YET
@@ -540,8 +539,8 @@ async t => {
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-test(`when only some chans get closed before some op can be executed, ` +
-  `executes that op (case 1)`, async t => {
+test(`when only some chans get closed before some op can be executed, executes that op (case 1)`,
+  async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
   let [chA, chB, chC] = [chan(), chan(), chan()]
   let sel = NOT_YET
@@ -568,8 +567,7 @@ test(`when only some chans get closed before some op can be executed, ` +
   t.ok(sel === chB)
 })
 
-test(`when only some chans get closed before some op can be executed, ` +
-  `executes that op (case 2)`,
+test(`when only some chans get closed before some op can be executed, executes that op (case 2)`,
 async t => {
   let [chA, chB] = [chan(), chan()]
   let sel = NOT_YET
@@ -592,8 +590,7 @@ async t => {
   t.ok(sel === chA)
 })
 
-test(`when only some chans get closed before some op can be executed, ` +
-  `executes that op (case 3)`,
+test(`when only some chans get closed before some op can be executed, executes that op (case 3)`,
 async t => {
   let [chA, chB, chC] = [chan(), chan(), chan()]
   let sel = NOT_YET
@@ -656,4 +653,38 @@ test(`ignores falsy args`, async t => {
 
   await t.nextTick()
   t.ok(chA === sel)
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`yields error if the op that was chosen yields error (case 1)`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan(1)
+  ch.sendErrorSync(new Error(`sync error`))
+  let pSel = chan.select( ch.take() )
+  await t.throws(pSel, /sync error/)
+})
+
+test(`yields error if the op that was chosen yields error (case 2)`, async t => {
+  let ch = chan()
+  let pSel = chan.select( ch.take() )
+
+  await t.nextTick()
+  ch.sendErrorSync(new Error(`aha!`))
+
+  await t.throws(pSel, /aha!/)
+})
+
+test(`yields error if the op that was chosen yields error (case 3)`, async t => {
+  let ch = chan()
+
+  // monkey-patch chan to make it throw on send when active
+  ch._send = (val, isError, fnVal, fnErr, needsCancelFn) => {
+    fnErr(new Error(`some weird error`))
+    return () => {}
+  }
+
+  let pSel = chan.select( ch.send('x') )
+
+  await t.nextTick()
+  await t.throws(pSel, /some weird error/)
 })
