@@ -108,7 +108,11 @@ function _selectSync(/* ...ops */) {
   assert(chan != undefined)
 
   if (op.kind == OP_TAKE) {
-    if (!chan.takeSync()) {
+    let success = chan._takeSync()
+    if (success === ERROR) {
+      return ERROR
+    }
+    if (!success) {
       assert.ok(false, 'chan should have allowed to take synchronously, but did not')
     }
   } else {
@@ -116,7 +120,11 @@ function _selectSync(/* ...ops */) {
     assert(op.promise != undefined)
     assert(op.promise._sendData != undefined)
     let data = op.promise._sendData
-    if (!chan.sendSync(data.value, data.isError)) {
+    let success = chan._sendSync(data.value, data.isError)
+    if (success === ERROR) {
+      return ERROR
+    }
+    if (!success) {
       assert.ok(false, 'chan should have allowed to send synchronously, but did not')
     }
   }

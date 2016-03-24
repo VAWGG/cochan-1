@@ -2,7 +2,7 @@ import assert from 'power-assert'
 import schedule from './schedule'
 import {Thenable} from './thenable'
 import {nop} from './utils'
-import {CLOSED, FAILED, OP_SEND} from './constants'
+import {CLOSED, FAILED, OP_SEND, ERROR} from './constants'
 import {P_RESOLVED, P_RESOLVED_WITH_FALSE, P_RESOLVED_WITH_TRUE} from './constants'
 
 
@@ -58,7 +58,7 @@ export class Chan {
   }
 
   sendErrorSync(err) {
-    return this.sendSync(err, true)
+    return this._sendSync(err, true)
   }
 
   sendError(err, close) {
@@ -69,7 +69,11 @@ export class Chan {
     }
   }
 
-  sendSync(value, isError) {
+  sendSync(value) {
+    return this._sendSync(value, false)
+  }
+
+  _sendSync(value, isError) {
     if (this._state >= STATE_CLOSING) {
       return false
     }
@@ -155,6 +159,15 @@ export class Chan {
   }
 
   takeSync() {
+    let success = this._takeSync()
+    if (success === ERROR) {
+      throw ERROR.value
+    } else {
+      return success
+    }
+  }
+
+  _takeSync() {
     if (this._state == STATE_CLOSED || this._state == STATE_WAITING_FOR_PUBLISHER) {
       return false
     }
@@ -188,7 +201,8 @@ export class Chan {
     }
 
     if (type == TYPE_ERROR) {
-      throw item.value
+      ERROR.value = item.value
+      return ERROR
     }
 
     return true
