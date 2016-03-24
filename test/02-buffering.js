@@ -1,8 +1,6 @@
 import test from './helpers'
 import chan from '../src'
 
-test.timeout(1000)
-
 test.beforeEach(t => {
   let ctx = t.context
   ctx.sent = ctx.recv = ''

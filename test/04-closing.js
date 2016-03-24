@@ -1,8 +1,6 @@
 import test from './helpers'
 import chan from '../src'
 
-test.timeout(1000)
-
 function assertActive(ch, t) {
   t.ok(ch.isClosed == false)
   t.ok(ch.isActive == true)

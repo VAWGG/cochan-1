@@ -1,7 +1,7 @@
 import _test from 'ava'
 export default test
 
-let defaultTimeout = 5000
+let defaultTimeout = +(process.env.TEST_TIMEOUT || 5000)
 
 export function test(a1, a2, a3) {
   declareTest(null, a1, a2, a3)

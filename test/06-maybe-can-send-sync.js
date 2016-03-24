@@ -3,8 +3,6 @@ import chan from '../src'
 
 const NOT_YET = { notYet: true }
 
-test.timeout(1000)
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 test(`#maybeCanSendSync() blocks until there is a pending take on a non-buffered chan, and ` +
   `returns true when unblocked`, async t => {
