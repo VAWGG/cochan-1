@@ -60,7 +60,8 @@ function _selectSync(/* ...ops */) {
         op = promise._op
         promise._seal()
       } else {
-        ERROR.value = new Error('select only supports passing take, send operations and channels')
+        ERROR.value = new Error(`unexpected argument ${arg}; select only supports passing ` +
+          `take, send operations and channels`)
         return ERROR
       }
       if (chan instanceof TimeoutChan) {
