@@ -7,6 +7,30 @@ import {arrayPool} from './pools'
 
 
 export function selectSync(/* ...chans */) {
+  let result = _selectSync.apply(null, arguments)
+  if (result === ERROR) {
+    cancelOps.apply(null, arguments)
+    throw ERROR.value
+  }
+  if (result === null || result === CLOSED) {
+    cancelOps.apply(null, arguments)
+  }
+  return result
+}
+
+
+function cancelOps(/* ...ops */) {
+  let total = arguments.length
+  for (let i = 0; i < total; ++i) {
+    let arg = arguments[i]
+    if (arg instanceof Thenable) {
+      arg._op = 0
+    }
+  }
+}
+
+
+function _selectSync(/* ...ops */) {
   let total = arguments.length
   let hasAliveNormalChans = false
   let syncTimeouts = arrayPool.take()
@@ -22,10 +46,12 @@ export function selectSync(/* ...chans */) {
         promise = undefined
       } else if (arg instanceof Thenable) {
         if (arg._cancel || arg._subs) {
-          throw new Error(THENABLE_MIXED_USE_MSG)
+          ERROR.value = new Error(THENABLE_MIXED_USE_MSG)
+          return ERROR
         }
         if (arg._isSealed) {
-          throw new Error(THENABLE_MULTIPLE_USE_MSG)
+          ERROR.value = new Error(THENABLE_MULTIPLE_USE_MSG)
+          return ERROR
         }
         assert(arg._op == OP_TAKE || arg._op == OP_SEND)
         assert(arg._chan && arg._chan._ischan === ISCHAN)
@@ -34,7 +60,8 @@ export function selectSync(/* ...chans */) {
         op = promise._op
         promise._seal()
       } else {
-        throw new Error('select only supports passing take, send operations and channels')
+        ERROR.value = new Error('select only supports passing take, send operations and channels')
+        return ERROR
       }
       if (chan instanceof TimeoutChan) {
         if (chan.canTakeSync) {
@@ -111,19 +138,10 @@ function random(arr, len) {
 }
 
 
-function trySelectSync(/* ...chans */) {
-  try {
-    return selectSync.apply(null, arguments)
-  } catch (err) {
-    ERROR.value = err
-    return ERROR
-  }
-}
-
-
 export function select(/* ...chans */) {
-  let syncResult = trySelectSync.apply(null, arguments)
+  let syncResult = _selectSync.apply(null, arguments)
   if (syncResult === ERROR) {
+    cancelOps.apply(null, arguments)
     return Promise.reject(ERROR.value)
   }
 
