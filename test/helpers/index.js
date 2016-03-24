@@ -11,6 +11,10 @@ test.only = function only(a1, a2, a3) {
   declareTest('only', a1, a2, a3)
 }
 
+test.serial = function serial(a1, a2, a3) {
+  declareTest('serial', a1, a2, a3)
+}
+
 test.timeout = function timeout(ms) {
   defaultTimeout = ms
 }
@@ -18,7 +22,7 @@ test.timeout = function timeout(ms) {
 exec(_ => {
   let descs = {}
   Object.getOwnPropertyNames(_test).forEach(prop => {
-    if (prop == 'only') return
+    if (prop == 'only' || prop == 'serial') return
     descs[prop] = Object.getOwnPropertyDescriptor(_test, prop)
   })
   Object.defineProperties(test, descs)
