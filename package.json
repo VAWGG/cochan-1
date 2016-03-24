@@ -1,6 +1,6 @@
 {
   "name": "cochan",
-  "version": "0.12.3",
+  "version": "0.12.4",
   "description": "Channel communication primitive",
   "author": "Sam Kozin <sam.kozin@gmail.com>",
   "scripts": {
