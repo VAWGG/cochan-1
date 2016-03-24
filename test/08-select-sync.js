@@ -1,4 +1,4 @@
-import test from './helpers'
+import {test, randomInsert} from './helpers'
 import chan from '../src'
 
 test.timeout(5000)
@@ -205,6 +205,28 @@ test(`given one chan that can be taken from sync, performs take and returns the 
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`given one take op that can be performed sync, performs it and returns its chan, even if ` +
+  `that chan becomes closed as a result of that op`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan(1)
+  ch.sendSync('x')
+  let pClosed = ch.close()
+  t.ok(ch === chan.selectSync( ch.take() ))
+  t.ok('x' == ch.value)
+  await pClosed
+})
+
+test(`given one chan that can be taken from sync, performs take and returns the chan, even if ` +
+  `it becomes closed as a result of that take`, async t => {
+  let ch = chan(1)
+  ch.sendSync('x')
+  let pClosed = ch.close()
+  t.ok(ch === chan.selectSync( ch ))
+  t.ok('x' == ch.value)
+  await pClosed
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 test(`given send op on that can be performed sync, performs it and returns its chan`, async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
   let ch = chan(1)
@@ -229,6 +251,9 @@ test(`given two take ops, only one of which can be performed sync, performs that
 
     t.ok(sel === chS)
     t.ok('x' == chS.value)
+
+    await t.nextTurn()
+    t.ok(false == chA.sendSync('x'))
   }
 })
 
@@ -247,6 +272,9 @@ async t => {
 
     t.ok(sel === chS)
     t.ok('x' == chS.value)
+
+    await t.nextTurn()
+    t.ok(false == chA.sendSync('x'))
   }
 })
 
@@ -265,6 +293,9 @@ test(`given two send ops, only one of which can be performed sync, performs that
     t.ok(sel === chS)
     t.ok(true == chS.takeSync())
     t.ok('s' == chS.value)
+
+    await t.nextTurn()
+    t.ok(false == chA.takeSync())
   }
 })
 
@@ -283,6 +314,9 @@ test(`given two ops: one send op that can be performed sync, and one take op whi
     t.ok(sel === chS)
     t.ok(true == chS.takeSync())
     t.ok('x' == chS.value)
+
+    await t.nextTurn()
+    t.ok(false == chA.sendSync('x'))
   }
 })
 
@@ -302,6 +336,9 @@ test(`given two ops: one take op that can be performed sync, and one send op whi
 
     t.ok(sel === chS)
     t.ok('x' == chS.value)
+
+    await t.nextTurn()
+    t.ok(false == chA.takeSync())
   }
 })
 
@@ -319,8 +356,15 @@ test(`given two take ops that can be performed sync, performs random one and ret
     let sel = chan.selectSync(chX.take(), chY.take())
     t.ok(sel === chX || sel === chY)
 
-    let value = sel === chX ? 'x' : 'y'
-    t.ok(value == sel.value)
+    if (sel == chX) {
+      t.ok('x' == chX.value)
+      await t.nextTurn()
+      t.ok(true == chY.takeSync())
+    } else {
+      t.ok('y' == chY.value)
+      await t.nextTurn()
+      t.ok(true == chX.takeSync())
+    }
   }
 })
 
@@ -337,8 +381,11 @@ async t => {
     let sel = chan.selectSync(chX, chY)
     t.ok(sel === chX || sel === chY)
 
-    let value = sel === chX ? 'x' : 'y'
+    let [value, nonSel] = sel === chX ? ['x', chY] : ['y', chX]
     t.ok(value == sel.value)
+
+    await t.nextTurn()
+    t.ok(true == nonSel.takeSync())
   }
 })
 
@@ -353,10 +400,13 @@ async t => {
     let sel = chan.selectSync(chX.send('x'), chY.send('y'))
     t.ok(sel === chX || sel === chY)
 
-    let value = sel === chX ? 'x' : 'y'
+    let [value, nonSel] = sel === chX ? ['x', chY] : ['y', chX]
 
     t.ok(true === sel.takeSync())
     t.ok(value === sel.value)
+
+    await t.nextTurn()
+    t.ok(false == nonSel.takeSync())
   }
 })
 
@@ -375,9 +425,13 @@ test(`given one send and one take op that can both be performed sync, selects ra
 
     if (sel === chT) {
       t.ok(chT.value == 't')
+      await t.nextTurn()
+      t.ok(chS.sendSync('s') == true)
     } else {
       t.ok(chS.takeSync() == true)
       t.ok(chS.value == 's')
+      await t.nextTurn()
+      t.ok(chT.takeSync() == true)
     }
   }
 })
@@ -408,8 +462,15 @@ for (let N = 3; N <= 7; ++N) {
     for (let i = 0; i < 10; ++i) {
       let ops = []
       for (let j = 1; j < N; ++j) {
+        let rand = Math.random()
         let ch = new chan()
-        let op = Math.random() > 0.5 ? ch.take() : ch.send('e')
+        let op; if (rand < 0.5) {
+          ch.named('take')
+          op = rand < 0.25 ? ch : ch.take()
+        } else {
+          ch.named('send')
+          op = ch.send('e')
+        }
         randomInsert(op, ops)
       }
       let chS = chan(1)
@@ -426,6 +487,17 @@ for (let N = 3; N <= 7; ++N) {
         t.ok(true == chS.takeSync())
       }
       t.ok('x' == chS.value)
+      await t.nextTurn()
+      for (let j = 0; j < N; ++j) {
+        let op = ops[j]
+        let ch = chan.isChan(op) ? op : op._chan
+        if (ch === chS) continue
+        if (ch.name == 'send') {
+          t.ok(false == ch.takeSync())
+        } else {
+          t.ok(false == ch.sendSync('e'))
+        }
+      }
     }
   })
 
@@ -438,11 +510,12 @@ for (let N = 3; N <= 7; ++N) {
         let ops = []
         let j = 0
         for (; j < N_SYNC; ++j) {
-          let isTake = Math.random() > 0.5
+          let rand = Math.random()
+          let isTake = rand < 0.5
           let ch = new chan(1).named(isTake ? `t-${j}` : `s-${j}`)
           let op; if (isTake) {
             ch.sendSync(ch.name)
-            op = ch.take()
+            op = rand < 0.25 ? ch : ch.take()
           } else {
             op = ch.send(ch.name)
           }
@@ -451,7 +524,9 @@ for (let N = 3; N <= 7; ++N) {
         }
         for (; j < N; ++j) {
           let ch = new chan()
-          let op = Math.random() > 0.5 ? ch.take() : ch.send('e')
+          let rand = Math.random()
+          let op = rand < 0.25 ? ch : rand < 0.5 ? ch.take() : ch.send('e')
+          ch.named(rand < 0.5 ? 't' : 's')
           randomInsert(op, ops)
         }
         let sel = chan.selectSync.apply(chan, ops)
@@ -460,6 +535,19 @@ for (let N = 3; N <= 7; ++N) {
           t.ok(true == sel.takeSync())
         }
         t.ok(sel.name == sel.value)
+        await t.nextTurn()
+        for (let j = 0; j < N; ++j) {
+          let op = ops[j]
+          let ch = chan.isChan(op) ? op : op._chan
+          if (ch === sel) {
+            continue
+          }
+          if (ch.name[0] == 's') {
+            t.ok(false == ch.takeSync())
+          } else {
+            t.ok(false == ch.sendSync('e'))
+          }
+        }
       }
     })
   }
@@ -535,8 +623,3 @@ test(`the op to perform gets selected randomly between those which can be perfor
     t.fail(`the choice of the op is not random, variance: ${ variance.toFixed(4) }`)
   }
 })
-
-function randomInsert(value, array) {
-  let i = Math.floor((array.length + 1) * Math.random())
-  array.splice(i, 0, value)
-}

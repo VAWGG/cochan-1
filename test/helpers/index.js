@@ -76,6 +76,11 @@ export function exec(fn) {
   return fn()
 }
 
+export function randomInsert(value, array) {
+  let i = Math.floor((array.length + 1) * Math.random())
+  array.splice(i, 0, value)
+}
+
 function withTimeout(ms, fn) {
   return t => new Promise((resolve, reject) => {
     let tid = setTimeout(fail, ms)
