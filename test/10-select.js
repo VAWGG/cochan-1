@@ -688,3 +688,53 @@ test(`yields error if the op that was chosen yields error (case 3)`, async t => 
   await t.nextTick()
   await t.throws(pSel, /some weird error/)
 })
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`correctly handles special chans`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  //
+  // for timeout chans interop, see tests above
+  //
+  let ch = chan()
+  let sel = NOT_YET
+  let onValue = v => sel = { value: v }
+  let onError = e => sel = { error: e }
+
+  let sig = chan.signal()
+  chan.select(ch, sig).then(onValue).catch(onError)
+  await t.nextTick()
+  t.ok(sel === NOT_YET)
+  sig.trigger('ururu')
+  await t.nextTick()
+  t.ok(sel.value === sig)
+  t.ok(sig.value == 'ururu')
+  t.is(sig, await chan.select(ch, sig))
+
+  sel = NOT_YET
+
+  let del = chan.delay(100, 'brbrbr')
+  chan.select(ch, del).then(onValue).catch(onError)
+  await t.nextTick()
+  t.ok(sel === NOT_YET)
+  await t.sleep(200)
+  t.ok(sel.value === del)
+  t.ok(del.value == 'brbrbr')
+  sel = NOT_YET
+  chan.select(ch, del).then(onValue).catch(onError)
+  await t.sleep(200)
+  t.ok(sel === NOT_YET)
+
+  sel = NOT_YET
+
+  let p = chan.fromPromise(t.sleep(100).then(_ => 'pam-param'))
+  chan.select(ch, p).then(onValue).catch(onError)
+  await t.nextTick()
+  t.ok(sel === NOT_YET)
+  await t.sleep(200)
+  t.ok(sel.value === p)
+  t.ok(p.value == 'pam-param')
+  sel = NOT_YET
+  chan.select(ch, del).then(onValue).catch(onError)
+  await t.sleep(200)
+  t.ok(sel === NOT_YET)
+})

@@ -2,7 +2,7 @@ import assert from 'power-assert'
 import schedule from './schedule'
 import {EventEmitterMixin} from './event-emitter'
 import {nop, mixin} from './utils'
-import {CLOSED} from './constants'
+import {CLOSED, ERROR} from './constants'
 import {P_RESOLVED_WITH_FALSE, P_RESOLVED_WITH_TRUE, P_RESOLVED} from './constants'
 
 
@@ -14,6 +14,10 @@ export class SpecialChan {
     this._consumers = undefined
   }
 
+  get sendOnly() {
+    this._throwUnsupported('converting into a send-only chan')
+  }
+
   get canSend() {
     return false
   }
@@ -22,20 +26,16 @@ export class SpecialChan {
     return false
   }
 
-  sendErrorSync(err) {
-    throw new Error(`sendErrorSync() is unsupported by ${ this.constructor.name }`)
+  _sendSync(value, isError) {
+    this._throwUnsupported('sending')
   }
 
-  sendError(err, close) {
-    throw new Error(`sendError() is unsupported by ${ this.constructor.name }`)
+  _send(value, isError, fnVal, fnErr, needsCancelFn) {
+    this._throwUnsupported('sending')
   }
 
-  sendSync(val) {
-    throw new Error(`sendSync() is unsupported by ${ this.constructor.name }`)
-  }
-
-  send(val) {
-    throw new Error(`send() is unsupported by ${ this.constructor.name }`)
+  send(value) {
+    this._throwUnsupported('sending')
   }
 
   maybeCanSendSync() {
@@ -66,6 +66,13 @@ export class SpecialChan {
       }
     }
   }
+
+  _throwUnsupported(what) {
+    let ctrName = this._desc ? this._desc.constructorName : this._constructorName
+    if (typeof ctrName == 'function') ctrName = ctrName(this)
+    if (ctrName == null) ctrName = this.constructor ? this.constructor.name : null
+    throw new Error(`${ what } is unsupported by ${ ctrName || 'unknown_chan_type' }`)
+  }
 }
 
 
@@ -79,16 +86,20 @@ class AlwaysActiveChanMixin {
     return true
   }
 
+  get takeOnly() {
+    return this // this chan cannot be sent to and closed per se
+  }
+
   closeSync() {
-    throw new Error(`closeSync() is unsupported by ${ this.constructor.name }`)
+    this._throwUnsupported('closing')
   }
 
   close() {
-    throw new Error(`close() is unsupported by ${ this.constructor.name }`)
+    this._throwUnsupported('closing')
   }
 
   closeNow() {
-    throw new Error(`closeNow() is unsupported by ${ this.constructor.name }`)
+    this._throwUnsupported('closing')
   }
 }
 
@@ -120,6 +131,10 @@ export class SignalChan extends SpecialChan { // mixins: AlwaysActiveChanMixin
   }
 
   takeSync() {
+    return this._takeSync()
+  }
+
+  _takeSync() {
     if (!this._isTriggered) {
       return false
     }
@@ -223,12 +238,13 @@ export class TimeoutChan extends SpecialChan { // mixins: DelayChanMixin, Always
     })
   }
 
-  takeSync() {
+  _takeSync() {
     if (Date.now() < this._timeoutDate) {
       return false
     }
     this._triggerNow()
-    throw this._makeError()
+    ERROR.value = this._makeError()
+    return ERROR
   }
 
   _take(fnVal, fnErr, needsCancelFn) {
@@ -324,6 +340,10 @@ class OneTimeChanMixin {
   }
 
   takeSync() {
+    return this._takeSync()
+  }
+
+  _takeSync() {
     if (this.canTakeSync) {
       this._close(false)
       return true

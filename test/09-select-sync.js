@@ -752,3 +752,28 @@ test(`throws if the sync op that was chosen yields error (case 2)`, async t => {
   ch1.sendErrorSync(new Error(`some weird error`))
   t.throws(() => chan.selectSync( ch1.take(), ch2.take() ), /some weird error/)
 })
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`correctly handles special chans`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan()
+  // for timeout chans interop, see tests above
+
+  let sig = chan.signal()
+  t.ok(chan.selectSync(ch, sig) === null)
+  sig.trigger('ururu')
+  t.ok(chan.selectSync(ch, sig) === sig)
+  t.ok(sig.value == 'ururu')
+
+  let del = chan.delay(10, 'brbrbr')
+  t.ok(chan.selectSync(ch, del) === null)
+  await t.sleep(200)
+  t.ok(chan.selectSync(ch, del) === del)
+  t.ok(del.value == 'brbrbr')
+
+  let p = chan.fromPromise(Promise.resolve('pam-param'))
+  t.ok(chan.selectSync(ch, p) === null)
+  await t.nextTick()
+  t.ok(chan.selectSync(ch, p) === p)
+  t.ok(p.value == 'pam-param')
+})
