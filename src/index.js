@@ -103,11 +103,16 @@ chan.merge = function merge(/* ...chans */) {
   } else {
     opts = MERGE_DEFAULTS
   }
-  return mergeTo(
-    createChanIfUndefined(opts.output, opts.bufferSize, MERGE_DEFAULTS.bufferSize),
+  let desc = opts.output ? undefined : {
+    constructorName: 'chan.merge',
+    constructorArgs: chans
+  }
+  let output = mergeTo(
+    createChanIfUndefined(opts.output, opts.bufferSize, MERGE_DEFAULTS.bufferSize, desc),
     chans,
     opts.closeOutput === undefined ? MERGE_DEFAULTS.closeOutput : !!opts.closeOutput
   )
+  return opts.output || output.takeOnly.withDesc(desc)
 }
 
 chan.merge.setDefaults = function merge$setDefaults(opts) {
@@ -310,11 +315,29 @@ class ChanBaseMixin {
     return this
   }
 
+  withDesc(desc) {
+    if (desc != this._desc) {
+      this._desc = desc
+    }
+    return this
+  }
+
   toString() {
-    let flags = this._displayFlags
-    let desc = this.name == undefined
-      ? `${ this._constructorName }(${ describeArray(this._constructorArgsDesc) })`
-      : `${ this._constructorName }<${ this.name }>(${ describeArray(this._constructorArgsDesc) })`
+    let ctrName, ctrArgsDesc, flags
+    let name = this.name
+    let descObj = this._desc
+    if (descObj) {
+      ctrName = toValue(descObj.constructorName, this)
+      ctrArgsDesc = toValue(descObj.constructorArgs, this)
+      flags = toValue(descObj.flags, this)
+      if (name == null) name = toValue(descObj.name, this)
+    }
+    if (ctrName == null) ctrName = this._constructorName || 'chan'
+    if (ctrArgsDesc == null) ctrArgsDesc = this._constructorArgsDesc
+    if (flags == null) flags = this._displayFlags
+    let desc = this.name == null
+      ? `${ ctrName }(${ describeArray(ctrArgsDesc) })`
+      : `${ ctrName }<${ this.name }>(${ describeArray(ctrArgsDesc) })`
     return flags
       ? `[${ flags }]${ desc }`
       : desc
@@ -325,7 +348,7 @@ class ChanBaseMixin {
   }
 
   get _constructorName() {
-    return this.constructor.name
+    return undefined
   }
 
   get _constructorArgsDesc() {
@@ -361,13 +384,18 @@ function fromIteratorWithOpts(iter, opts, defaults) {
   )
 }
 
-function createChanIfUndefined(chan, bufferSize, defaultBufferSize) {
-  if (chan != undefined) {
-    if (!Chan.isChan(chan)) throw new TypeError(
-      `opts.output must be either undefined or a channel; got: ${ describeValue(chan) }`)
-    return chan
+function createChanIfUndefined(ch, bufferSize, defaultBufferSize) {
+  if (ch != undefined) {
+    if (!chan.isChan(ch)) throw new TypeError(
+      `opts.output must be either undefined or a channel; got: ${ describeValue(ch) }`)
+    return ch
   }
   return new Chan(bufferSize === undefined ? defaultBufferSize : bufferSize)
+}
+
+
+function toValue(obj, arg) {
+  return typeof obj === 'function' ? obj(arg) : obj
 }
 
 
