@@ -34,17 +34,17 @@ test(`yields chan.CLOSED given send op on a closing chan`, async t => {
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-test(`yields error given any arg that is not falsy, chan, or op`, async t => {
+test(`throws given any arg that is not falsy, chan, or op`, async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
   let ch = chan()
-  await t.throws(chan.select({}), /unexpected argument/)
-  await t.throws(chan.select(true), /unexpected argument/)
-  await t.throws(chan.select('ururu'), /unexpected argument/)
-  await t.throws(chan.select(ch, {}), /unexpected argument/)
-  await t.throws(chan.select({}, ch), /unexpected argument/)
-  await t.throws(chan.select(ch, true), /unexpected argument/)
-  await t.throws(chan.select(true, ch), /unexpected argument/)
-  await t.throws(chan.select({}, true), /unexpected argument/)
+  t.throws(() => chan.select({}), /unexpected argument/)
+  t.throws(() => chan.select(true), /unexpected argument/)
+  t.throws(() => chan.select('ururu'), /unexpected argument/)
+  t.throws(() => chan.select(ch, {}), /unexpected argument/)
+  t.throws(() => chan.select({}, ch), /unexpected argument/)
+  t.throws(() => chan.select(ch, true), /unexpected argument/)
+  t.throws(() => chan.select(true, ch), /unexpected argument/)
+  t.throws(() => chan.select({}, true), /unexpected argument/)
 })
 
 test(`yields error given an op that was initialed not on the current tick`, async t => {
@@ -56,20 +56,20 @@ test(`yields error given an op that was initialed not on the current tick`, asyn
 
   await t.nextTick()
 
-  await t.throws(chan.select(opSend))
-  await t.throws(chan.select(chY, opSend))
-  await t.throws(chan.select(opSend, chY))
-  await t.throws(chan.select(opSend, chY.take()))
-  await t.throws(chan.select(chY.take(), opSend))
+  t.throws(() => chan.select(opSend))
+  t.throws(() => chan.select(chY, opSend))
+  t.throws(() => chan.select(opSend, chY))
+  t.throws(() => chan.select(opSend, chY.take()))
+  t.throws(() => chan.select(chY.take(), opSend))
 
-  await t.throws(chan.select(opTake))
-  await t.throws(chan.select(chX, opTake))
-  await t.throws(chan.select(opTake, chX))
-  await t.throws(chan.select(opTake, chX.take()))
-  await t.throws(chan.select(chX.take(), opTake))
+  t.throws(() => chan.select(opTake))
+  t.throws(() => chan.select(chX, opTake))
+  t.throws(() => chan.select(opTake, chX))
+  t.throws(() => chan.select(opTake, chX.take()))
+  t.throws(() => chan.select(chX.take(), opTake))
 
-  await t.throws(chan.select(opTake, opSend))
-  await t.throws(chan.select(opSend, opTake))
+  t.throws(() => chan.select(opTake, opSend))
+  t.throws(() => chan.select(opSend, opTake))
 })
 
 test(`yields error when the same op instance gets passed into two select operations`, async t => {
@@ -78,7 +78,7 @@ test(`yields error when the same op instance gets passed into two select operati
   let op = chX.send('x')
 
   chan.select(op)
-  await t.throws(chan.select( op, chY.send('e') ))
+  t.throws(() => chan.select( op, chY.send('e') ))
 
   await t.nextTurn()
   t.ok(false == chY.takeSync()) // chY.send('e') was not performed
@@ -88,10 +88,16 @@ test(`yields error when the same op instance gets passed into two select operati
   op = chX.take()
 
   chan.select(op)
-  await t.throws(chan.select( op, chY.send('e') ))
+  t.throws(() => chan.select( op, chY.send('e') ))
 
   await t.nextTurn()
   t.ok(false == chY.takeSync()) // chY.send('e') was not performed
+})
+
+test(`throws given send-only chan`, async t => {
+  let so = chan().sendOnly
+  t.throws(() => chan.select( so ), /send-only/)
+  t.throws(() => chan.select( chan(), so ), /send-only/)
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

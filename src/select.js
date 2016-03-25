@@ -5,6 +5,8 @@ import {TimeoutChan} from './special-chans'
 import {Thenable} from './thenable'
 import {arrayPool} from './pools'
 
+const FATAL = {}
+
 
 export function selectSync(/* ...chans */) {
   let result = _selectSync.apply(null, arguments)
@@ -47,10 +49,12 @@ function _selectSync(/* ...ops */) {
       } else if (arg instanceof Thenable) {
         if (arg._cancel || arg._subs) {
           ERROR.value = new Error(THENABLE_MIXED_USE_MSG)
+          ERROR.value.fatal = FATAL
           return ERROR
         }
         if (arg._isSealed) {
           ERROR.value = new Error(THENABLE_MULTIPLE_USE_MSG)
+          ERROR.value.fatal = FATAL
           return ERROR
         }
         assert(arg._op == OP_TAKE || arg._op == OP_SEND)
@@ -62,6 +66,7 @@ function _selectSync(/* ...ops */) {
       } else {
         ERROR.value = new Error(`unexpected argument ${arg}; select only supports passing ` +
           `take, send operations and channels`)
+        ERROR.value.fatal = FATAL
         return ERROR
       }
       if (chan instanceof TimeoutChan) {
@@ -150,7 +155,12 @@ export function select(/* ...chans */) {
   let syncResult = _selectSync.apply(null, arguments)
   if (syncResult === ERROR) {
     cancelOps.apply(null, arguments)
-    return Promise.reject(ERROR.value)
+    if (ERROR.value.fatal === FATAL) {
+      ERROR.value.fatal = undefined
+      throw ERROR.value
+    } else {
+      return Promise.reject(ERROR.value)
+    }
   }
 
   if (syncResult) {

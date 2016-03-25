@@ -777,3 +777,19 @@ test(`correctly handles special chans`, async t => {
   t.ok(chan.selectSync(ch, p) === p)
   t.ok(p.value == 'pam-param')
 })
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`ignores send-only chans`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let so = chan().sendOnly
+  t.ok(chan.selectSync( so ) === null)
+
+  let ch = chan(1)
+  ch.sendSync('x')
+  t.ok(chan.selectSync( so, ch ) === ch)
+  t.ok(ch.value == 'x')
+
+  t.ok(chan.selectSync( so, ch.send('y') ) === ch)
+  t.ok(ch.takeSync() == true)
+  t.ok(ch.value == 'y')
+})
