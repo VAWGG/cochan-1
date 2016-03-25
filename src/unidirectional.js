@@ -32,14 +32,12 @@ export class TakeOnlyChanProxy {
     return this._chan.maybeCanTakeSync()
   }
 
-  takeSync() {
-    return this._chan.takeSync()
+  _takeSync() {
+    return this._chan._takeSync()
   }
 
-  take() {
-    let thenable = this._chan.take()
-    thenable._chan = this
-    return thenable
+  _take(fnVal, fnErr, needsCancelFn) {
+    return this._chan._take(fnVal, fnErr, needsCancelFn)
   }
 
   get _constructorName() {
@@ -54,6 +52,14 @@ export class TakeOnlyChanProxy {
     return '<-' + this._chan._displayFlags
   }
 
+  withDesc(desc) {
+    return withDesc(desc, this)
+  }
+
+  get _desc() {
+    return this.__desc || prependDescFlags('<-', this._chan._desc)
+  }
+
   get _ischan() {
     return ISCHAN
   }
@@ -63,7 +69,7 @@ export class TakeOnlyChanProxy {
   }
 
   get sendOnly() {
-    throw new Error(`Cannot convert take-only chan ${this} into a send-only one`)
+    throw new Error(`cannot convert take-only chan ${this} into a send-only one`)
   }
 
   get canSend() {
@@ -74,20 +80,20 @@ export class TakeOnlyChanProxy {
     return false
   }
 
-  sendErrorSync(err) {
-    throw new Error(`Cannot send into take-only chan ${this}`)
+  _sendSync(value) {
+    this._throwCannotSend()
   }
 
   sendError(err, close) {
-    throw new Error(`Cannot send into take-only chan ${this}`)
-  }
-
-  sendSync(val) {
-    throw new Error(`Cannot send into take-only chan ${this}`)
+    this._throwCannotSend()
   }
 
   send(val) {
-    throw new Error(`Cannot send into take-only chan ${this}`)
+    this._throwCannotSend()
+  }
+
+  _send(value, isError, fnVal, fnErr, needsCancelFn) {
+    this._throwCannotSend()
   }
 
   maybeCanSendSync() {
@@ -95,21 +101,21 @@ export class TakeOnlyChanProxy {
   }
 
   closeSync() {
-    throw new Error(`Cannot close take-only chan ${this}`)
-  }
-
-  close() {
-    throw new Error(`Cannot close take-only chan ${this}`)
+    this._throwCannotClose()
   }
 
   closeNow() {
-    throw new Error(`Cannot close take-only chan ${this}`)
+    this._throwCannotClose()
+  }
+
+  close() {
+    this._throwCannotClose()
   }
 
   // writable stream
 
   write(chunk, encoding, cb) {
-    let err = new Error(`Cannot write into take-only chan ${this}`)
+    let err = new Error(`cannot write into take-only chan ${this}`)
     schedule.microtask(() => {
       cb && cb(err)
       this.emit('error', err)
@@ -121,15 +127,23 @@ export class TakeOnlyChanProxy {
   }
 
   cork() {
-    throw new Error(`Cannot cork take-only chan ${this}`)
+    throw new Error(`cannot cork take-only chan ${this}`)
   }
 
   uncork() {
-    throw new Error(`Cannot uncork take-only chan ${this}`)
+    throw new Error(`cannot uncork take-only chan ${this}`)
   }
 
   setDefaultEncoding(encoding) {
-    throw new Error(`Cannot set default encoding on take-only chan ${this}`)
+    throw new Error(`cannot set default encoding on take-only chan ${this}`)
+  }
+
+  _throwCannotSend() {
+    throw new Error(`cannot send into take-only chan ${this}`)
+  }
+
+  _throwCannotClose() {
+    throw new Error(`cannot close take-only chan ${this}`)
   }
 }
 
@@ -160,22 +174,8 @@ export class SendOnlyChanProxy {
     return this._chan.canSendSync
   }
 
-  sendErrorSync(err) {
-    return this._chan.sendErrorSync(err)
-  }
-
-  sendError(err, close) {
-    return this._chan.sendError(err, close)
-  }
-
-  sendSync(val) {
-    return this._chan.sendSync(val)
-  }
-
-  send(val) {
-    let thenable = this._chan.send(val)
-    thenable._chan = this
-    return thenable
+  _send(value, isError, fnVal, fnErr, needsCancelFn) {
+    return this._chan._send(value, isError, fnVal, fnErr, needsCancelFn)
   }
 
   maybeCanSendSync() {
@@ -206,6 +206,14 @@ export class SendOnlyChanProxy {
     return '->' + this._chan._displayFlags
   }
 
+  withDesc(desc) {
+    return withDesc(desc, this)
+  }
+
+  get _desc() {
+    return this.__desc || prependDescFlags('->', this._chan._desc)
+  }
+
   get _ischan() {
     return ISCHAN
   }
@@ -215,7 +223,7 @@ export class SendOnlyChanProxy {
   }
 
   get takeOnly() {
-    throw new Error(`Cannot convert send-only chan ${this} into a take-only one`)
+    throw new Error(`cannot convert send-only chan ${this} into a take-only one`)
   }
 
   get canTake() {
@@ -231,11 +239,15 @@ export class SendOnlyChanProxy {
   }
 
   takeSync() {
-    throw new Error(`Cannot take from send-only chan ${this}`)
+    this._throwCannotTake()
   }
 
   take() {
-    throw new Error(`Cannot take from send-only chan ${this}`)
+    this._throwCannotTake()
+  }
+
+  _take(fnVal, fnErr, needsCancelFn) {
+    this._throwCannotTake()
   }
 
   // writable stream
@@ -259,4 +271,28 @@ export class SendOnlyChanProxy {
   setDefaultEncoding(encoding) {
     this._chan.setDefaultEncoding(encoding)
   }
+
+  _throwCannotTake() {
+    throw new Error(`cannot take from send-only chan ${this}`)
+  }
+}
+
+
+function prependDescFlags(flags, desc) {
+  return !desc ? desc : {
+    constructorName: desc.constructorName,
+    constructorArgs: desc.constructorArgs,
+    flags: desc.flags == null ? undefined : typeof desc.flags == 'function'
+      ? ch => flags + desc.flags(ch)
+      : flags + desc.flags,
+    name: desc.name
+  }
+}
+
+
+function withDesc(desc, ch) {
+  if (desc != ch.__desc) {
+    ch.__desc = desc
+  }
+  return ch
 }
