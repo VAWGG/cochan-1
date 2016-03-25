@@ -85,8 +85,7 @@ function _selectSync(/* ...ops */) {
     let chan = random(syncTimeouts, total)
     arrayPool.put(syncTimeouts)
     arrayPool.put(syncOps)
-    chan.takeSync() // will throw
-    assert.ok(false, 'timeout chan should have thrown but did not')
+    return chan._takeSync()
   }
 
   total = syncOps.length

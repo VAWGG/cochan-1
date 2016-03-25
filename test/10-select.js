@@ -689,6 +689,13 @@ test(`yields error if the op that was chosen yields error (case 3)`, async t => 
   await t.throws(pSel, /some weird error/)
 })
 
+test(`yields error given expired timeout chan`, async t => {
+  let tch = chan.timeout(0)
+  await t.sleep(10)
+  let pSel = chan.select( chan().take(), tch.take() )
+  await t.throws(pSel, /timeout/)
+})
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 test(`correctly handles special chans`, async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
