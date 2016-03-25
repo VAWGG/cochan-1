@@ -7,7 +7,7 @@ import {select, selectSync} from './select'
 import {ChanWritableStreamMixin} from './writable-stream'
 import {mergeTo} from './merge'
 import {fromIterator, thenableRunner} from './iterator'
-import {ISCHAN, CLOSED, OP_TAKE} from './constants'
+import {ISCHAN, CLOSED, OP_TAKE, OP_SEND, ERROR} from './constants'
 import {mixin, describeArray, describeValue, defaultTo, extend, nop} from './utils'
 import {isIterator, isGenerator, isGeneratorFunction} from './utils'
 import schedule from './schedule'
@@ -235,6 +235,23 @@ class ChanBaseMixin {
     return true
   }
 
+  takeSync() {
+    let success = this._takeSync()
+    if (success === ERROR) {
+      throw ERROR.value
+    } else {
+      return success
+    }
+  }
+
+  sendSync(value) {
+    return this._sendSync(value, false)
+  }
+
+  sendErrorSync(err) {
+    return this._sendSync(err, true)
+  }
+
   take() {
     let promise = new Thenable(this, OP_TAKE)
     schedule.microtask(() => {
@@ -248,6 +265,30 @@ class ChanBaseMixin {
       }
     })
     return promise
+  }
+
+  send(value, isError) {
+    let promise = new Thenable(this, OP_SEND)
+    promise._sendData = { value, isError }
+    schedule.microtask(() => {
+      if (promise._op) {
+        let bound = promise._bound
+        let cancel = this._send(value, isError, bound.fulfill, bound.reject, true)
+        // the previous line might have already cancelled this promise, so we need to check
+        if (promise._op) {
+          promise._cancel = cancel
+        }
+      }
+    })
+    return promise
+  }
+
+  sendError(err, close) {
+    if (close) {
+      return this.send(err, true).then(() => this.close())
+    } else {
+      return this.send(err, true)
+    }
   }
 
   get takeOnly() {

@@ -57,22 +57,6 @@ export class Chan {
     return this._state != STATE_WAITING_FOR_PUBLISHER && this._buffer.length > 0
   }
 
-  sendErrorSync(err) {
-    return this._sendSync(err, true)
-  }
-
-  sendError(err, close) {
-    if (close) {
-      return this.send(err, true).then(() => this.close())
-    } else {
-      return this.send(err, true)
-    }
-  }
-
-  sendSync(value) {
-    return this._sendSync(value, false)
-  }
-
   _sendSync(value, isError) {
     if (this._state >= STATE_CLOSING) {
       return false
@@ -108,22 +92,6 @@ export class Chan {
     return false
   }
 
-  send(value, isError) {
-    let promise = new Thenable(this, OP_SEND)
-    promise._sendData = { value, isError }
-    schedule.microtask(() => {
-      if (promise._op) {
-        let bound = promise._bound
-        let cancel = this._send(value, isError, bound.fulfill, bound.reject, true)
-        // the previous line might have already cancelled this promise, so we need to check
-        if (promise._op) {
-          promise._cancel = cancel
-        }
-      }
-    })
-    return promise
-  }
-
   _send(value, isError, fnVal, fnErr, needsCancelFn) {
     if (this._state >= STATE_CLOSING) {
       fnErr(new Error('attempt to send into a closed channel'))
@@ -156,15 +124,6 @@ export class Chan {
     }
     
     return cancel
-  }
-
-  takeSync() {
-    let success = this._takeSync()
-    if (success === ERROR) {
-      throw ERROR.value
-    } else {
-      return success
-    }
   }
 
   _takeSync() {
