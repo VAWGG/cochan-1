@@ -792,31 +792,31 @@ Send-only channels allow producing into a channel (sync & async), and closing a 
 
 ## Test coverage (WIP)
 
-Please note that Funcs and (probably) Branch coverage is currently
-incorrect (less than in reality) due to [an issue in nyc].
+Please note that functions coverage numbers are currently incorrect (less
+than expected) due to [an issue in nyc].
 
 ```
 ---------------------|----------|----------|----------|----------|
 File                 |  % Stmts | % Branch |  % Funcs |  % Lines |
 ---------------------|----------|----------|----------|----------|
- src/                |    56.95 |    49.15 |       50 |    57.51 |
-  chan.js            |    97.64 |    95.58 |    93.75 |    97.55 |
+ src/                |    63.18 |    52.79 |    54.61 |    63.64 |
+  chan.js            |    98.73 |    95.95 |      100 |    98.68 |
   constants.js       |    86.67 |      100 |      100 |    85.71 |
   event-emitter.js   |    19.54 |     8.33 |     7.14 |    22.08 |
-  index.js           |    57.14 |    32.35 |       30 |    56.88 |
+  index.js           |    63.58 |     37.5 |    43.48 |    62.94 |
   iterator.js        |    13.25 |        0 |        0 |    13.58 |
   merge.js           |     9.57 |        0 |        0 |     9.82 |
   pool.js            |    86.21 |     62.5 |      100 |    86.21 |
   pools.js           |      100 |      100 |      100 |      100 |
   schedule.js        |    52.94 |       50 |       50 |    53.85 |
-  select.js          |    97.32 |    96.51 |      100 |    97.92 |
-  special-chans.js   |     41.5 |    24.59 |    58.33 |    42.78 |
+  select.js          |    98.06 |    96.59 |      100 |    98.01 |
+  special-chans.js   |    73.81 |    52.27 |       75 |    74.75 |
   thenable.js        |    94.59 |       64 |    88.89 |    94.59 |
-  unidirectional.js  |      2.9 |        0 |       40 |      2.9 |
+  unidirectional.js  |    19.74 |    16.67 |       50 |    19.74 |
   utils.js           |    63.49 |    32.69 |    45.45 |    64.52 |
   writable-stream.js |     5.88 |        0 |       50 |     5.88 |
 ---------------------|----------|----------|----------|----------|
-All files            |    56.95 |    49.15 |       50 |    57.51 |
+All files            |    63.18 |    52.79 |    54.61 |    63.64 |
 ---------------------|----------|----------|----------|----------|
 ```
 
@@ -826,7 +826,7 @@ All files            |    56.95 |    49.15 |       50 |    57.51 |
 ## TODO
 
 * API docs.
-* Cover with tests.
+* Cover with tests: merge, iterator/generator, special chans, streams, event emitter.
 * Provide missing examples for `generators-co` and `plain-promises`.
 * Support [async iteration](https://github.com/tc39/proposal-async-iteration)?
 
