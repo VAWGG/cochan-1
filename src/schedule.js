@@ -10,7 +10,8 @@ const schedule = {
   macrotask: undefined,
   microtask: undefined,
   setTimeout: setTimeout,
-  clearTimeout: clearTimeout
+  clearTimeout: clearTimeout,
+  now: typeof Date.now == 'function' ? () => Date.now() : () => +new Date()
 }
 
 export default schedule

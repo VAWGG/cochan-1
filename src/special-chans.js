@@ -185,7 +185,7 @@ class DelayChanMixin {
 
   _initDelayChanBase(ms) {
     this._ms = ms
-    this._timeoutDate = Date.now() + ms
+    this._timeoutDate = schedule.now() + ms
     this._tid = undefined
     this._timeoutBound = () => {
       this._tid = undefined
@@ -200,7 +200,7 @@ class DelayChanMixin {
 
   _subscribe(now) {
     assert(!this._isSubscribed)
-    let delay = Math.max(0, this._timeoutDate - (now || Date.now()))
+    let delay = Math.max(0, this._timeoutDate - (now || schedule.now()))
     this._tid = schedule.setTimeout(this._timeoutBound, delay)
   }
 
@@ -225,7 +225,7 @@ export class TimeoutChan extends SpecialChan { // mixins: DelayChanMixin, Always
   }
 
   get canTakeSync() {
-    return !this._timeoutDate || Date.now() >= this._timeoutDate
+    return !this._timeoutDate || schedule.now() >= this._timeoutDate
   }
 
   maybeCanTakeSync() {
@@ -239,7 +239,7 @@ export class TimeoutChan extends SpecialChan { // mixins: DelayChanMixin, Always
   }
 
   _takeSync() {
-    if (Date.now() < this._timeoutDate) {
+    if (schedule.now() < this._timeoutDate) {
       return false
     }
     this._triggerNow()
@@ -251,7 +251,7 @@ export class TimeoutChan extends SpecialChan { // mixins: DelayChanMixin, Always
     if (!fnErr) {
       return nop
     }
-    let now = Date.now()
+    let now = schedule.now()
     if (now >= this._timeoutDate) {
       this._triggerNow()
       fnErr(this._makeError())
@@ -432,7 +432,7 @@ export class DelayChan extends SpecialChan { // mixins: DelayChanMixin, OneTimeC
   }
 
   get _isTriggered() {
-    return !this._timeoutDate || Date.now() >= this._timeoutDate
+    return !this._timeoutDate || schedule.now() >= this._timeoutDate
   }
 
   _timeout() {

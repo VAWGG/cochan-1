@@ -217,6 +217,7 @@ chan.setAsyncDefaults = function setAsyncDefaults(opts) {
  * Sets functions for scheduling timeouts, micro- and macrotasks.
  */
 chan.setScheduler = function setScheduler(fns = chan.setScheduler.defaults) {
+  schedule.now = fns.now || schedule.now
   schedule.microtask = fns.microtask || schedule.microtask
   schedule.macrotask = fns.macrotask || schedule.macrotask
   schedule.setTimeout = fns.setTimeout || schedule.setTimeout
@@ -227,6 +228,7 @@ chan.setScheduler = function setScheduler(fns = chan.setScheduler.defaults) {
  * Default values for all scheduling functions.
  */
 chan.setScheduler.defaults = {
+  now: schedule.now,
   macrotask: schedule.macrotask,
   microtask: schedule.microtask,
   setTimeout: schedule.setTimeout,
