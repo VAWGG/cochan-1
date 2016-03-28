@@ -1,5 +1,13 @@
+import Scheduler from './scheduler'
+export const scheduler = new Scheduler()
+
 import _test from 'ava'
 export default test
+
+import chan from '../../src'
+
+chan.setScheduler(scheduler)
+_test.afterEach(t => scheduler.removeScheduleObservers())
 
 let defaultTimeout = +(process.env.TEST_TIMEOUT || 5000)
 
@@ -51,15 +59,15 @@ function declareTest(mod, a1, a2, a3) {
 export function nop() {}
 
 export function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms))
+  return new Promise(resolve => scheduler.setTimeout(resolve, ms))
 }
 
 export function nextTick() {
-  return new Promise(resolve => process.nextTick(resolve))
+  return new Promise(resolve => scheduler.nextTick(resolve))
 }
 
 export function nextTurn() {
-  return new Promise(resolve => setImmediate(resolve))
+  return new Promise(resolve => scheduler.setImmediate(resolve))
 }
 
 export async function consume(ch, values = []) {
@@ -69,7 +77,7 @@ export async function consume(ch, values = []) {
   return values
 }
 
-export async function consumeSync(ch, values = []) {
+export function consumeSync(ch, values = []) {
   while (ch.takeSync()) {
     values.push(ch.value)
   }

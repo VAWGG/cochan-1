@@ -1,36 +1,7 @@
-import test from './helpers'
+import {test, scheduler} from './helpers'
 import chan from '../src'
 
 const NOT_YET = { desc: 'NOT_YET' }
-
-class Scheduler {
-  constructor() {
-    this.nTimeoutObservers = 0
-    this._onNewTimeoutObserver = []
-    this.setTimeout = (fn, ms) => this._setTimeout(fn, ms)
-    this.clearTimeout = (id) => this._clearTimeout(id)
-  }
-  onNewTimeoutObserver(fn) {
-    this._onNewTimeoutObserver.push(fn)
-  }
-  removeListeners() {
-    this._onNewTimeoutObserver.length = 0
-  }
-  _setTimeout(fn, ms) {
-    ++this.nTimeoutObservers
-    this._onNewTimeoutObserver.forEach(fn => fn())
-    this._onNewTimeoutObserver.length = 0
-    return setTimeout(fn, ms)
-  }
-  _clearTimeout(id) {
-    --this.nTimeoutObservers
-    clearTimeout(id)
-  }
-}
-
-const scheduler = new Scheduler()
-chan.setScheduler(scheduler)
-test.afterEach(t => scheduler.removeListeners())
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 test(`chan.timeout(ms[, msg]) creates a special timeout chan`, async t => {
@@ -68,7 +39,7 @@ test(`timeout chan blocks until the specified timeout is reached, and after that
   await t.nextTurn()
   t.ok(err === NOT_YET)
 
-  await t.sleep(200)
+  await t.sleep(110)
   t.ok(err instanceof Error && /timeout/.test(err.message))
 })
 
@@ -87,7 +58,7 @@ test(`the optional second arg can be used to specify custom error message`, asyn
   await t.nextTurn()
   t.ok(err === NOT_YET)
 
-  await t.sleep(200)
+  await t.sleep(110)
   t.ok(err instanceof Error && /alas/.test(err.message))
 })
 
@@ -104,7 +75,7 @@ test(`sync takes fail before timeout is reached, and throw after that`, async t 
   t.ok(false == tch.canTakeSync)
   t.ok(false == tch.takeSync())
 
-  await t.sleep(200)
+  await t.sleep(110)
 
   t.ok(true == tch.canTakeSync)
   t.throws(() => tch.takeSync(), /timeout/)
@@ -122,7 +93,7 @@ test(`#maybeCanTakeSync() calls block, and yield true after the timeout is reach
   await t.nextTurn()
   t.same(unblockedWith, [ NOT_YET, NOT_YET ])
 
-  await t.sleep(200)
+  await t.sleep(110)
   t.same(unblockedWith, [ true, true ])
 })
 
@@ -139,7 +110,7 @@ test(`supports multiple observers`, async t => {
   await t.nextTick()
   t.same(errs, [ NOT_YET, NOT_YET, NOT_YET ])
 
-  await t.sleep(200)
+  await t.sleep(110)
   let msgs = errs.map(e => e.message)
   t.ok( msgs && msgs.every(msg => /timeout/.test(msg)) )
 
@@ -179,7 +150,7 @@ test(`is always active and cannot be sent to`, async t => {
   t.ok(false == tch.canSend)
   t.ok(false == tch.canSendSync)
 
-  await t.sleep(200)
+  await t.sleep(110)
 
   await t.throws(tch.take(), /timeout/)
   t.throws(() => tch.takeSync(), /timeout/)
@@ -201,7 +172,7 @@ test(`throws on all attempts to close and send a value`, async t => {
   t.throws(() => tch.closeSync(), /unsupported/)
   t.throws(() => tch.closeNow(), /unsupported/)
 
-  await t.sleep(200)
+  await t.sleep(110)
   await t.throws(tch.take(), /timeout/)
   t.throws(() => tch.takeSync(), /timeout/)
 
@@ -217,7 +188,7 @@ test(`#maybeCanSendSync() calls always yield true`, async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
   let tch = chan.timeout(100)
   t.is(true, await tch.maybeCanSendSync())
-  await t.sleep(200)
+  await t.sleep(110)
   t.is(true, await tch.maybeCanSendSync())
 })
 
@@ -234,7 +205,7 @@ test(`(internal) supports cancellation (case 1)`, async t => {
   t.ok('function' == typeof th._cancel)
   th._cancel()
 
-  await t.sleep(200)
+  await t.sleep(110)
   t.ok(err === NOT_YET)
 })
 
@@ -255,7 +226,7 @@ test(`(internal) supports cancellation (case 2)`, async t => {
   t.ok('function' == typeof th1._cancel)
   th1._cancel()
 
-  await t.sleep(200)
+  await t.sleep(110)
 
   t.ok(err1 === NOT_YET)
   t.ok(err2 instanceof Error)
@@ -265,18 +236,22 @@ test(`(internal) supports cancellation (case 2)`, async t => {
 test.serial(`(internal) doesn't hold resources while has no pending takes`, async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
   let tch = chan.timeout(100)
-  t.ok(scheduler.nTimeoutObservers == 0)
+  t.ok(scheduler.scheduledCounts.timeout == 0)
 
   let th = tch.take()
   await t.nextTick()
 
-  t.ok(scheduler.nTimeoutObservers == 1)
+  t.ok(scheduler.scheduledCounts.timeout == 1)
 
   th._cancel()
-  t.ok(scheduler.nTimeoutObservers == 0)
+  t.ok(scheduler.scheduledCounts.timeout == 0)
 
-  await t.sleep(200)
-  scheduler.onNewTimeoutObserver(t.fail.with(`new timeout observer was added`))
+  await t.sleep(110)
+  scheduler.onScheduled((fn, type, id) => {
+    if (type == 'timeout') {
+      t.fail(`new timeout task was added: ${fn}`)
+    }
+  })
 
   t.throws(() => tch.takeSync(), /timeout/)
   await t.throws(tch.take(), /timeout/)
