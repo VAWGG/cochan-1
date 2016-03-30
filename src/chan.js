@@ -203,12 +203,6 @@ export class Chan {
     return needsCancelFn ? () => { item.fnVal = item.fnErr = undefined } : nop
   }
 
-  _close() {
-    assert(this._buffer.length == 0)
-    this._state = STATE_CLOSED
-    schedule.microtask(() => this._triggerWaiters(false))
-  }
-
   maybeCanTakeSync() {
     if (this._state == STATE_CLOSED) {
       return P_RESOLVED_WITH_FALSE
@@ -265,16 +259,12 @@ export class Chan {
       return false
     }
     if (this._state == STATE_WAITING_FOR_PUBLISHER) {
-      this._state = STATE_CLOSED
-      this._terminateAllWaitingConsumers()
-      this._triggerWaiters(false)
-      this.emit('finish')
+      this._terminateAllOutstandingOpsAndClose()
       return true
     }
     if (this._buffer.length == 0) {
       // there are no real publishers, only (maybe) waiters for opportunity to publish => kill 'em
-      this._state = STATE_CLOSED
-      this._triggerWaiters(false)
+      this._close(STATE_NORMAL)
       return true
     }
     return false
@@ -301,11 +291,7 @@ export class Chan {
     this._triggerWaiters(false)
 
     let resolve, promise = new Promise(res => { resolve = res })
-
-    let fn = () => {
-      this.emit('finish')
-      resolve()
-    }
+    let fn = _ => resolve()
 
     fn.promise = promise
     this._waiters.push(fn)
@@ -314,15 +300,31 @@ export class Chan {
   }
 
   closeNow() {
-    if (!this.closeSync()) {
-      let prevState = this._state
-      this._state = STATE_CLOSED
-      this._terminateAllWaitingPublishers()
-      this._triggerWaiters(false)
-      if (prevState != STATE_CLOSING) {
-        this.emit('finish')
-      } // else finish is emitted from close waiter fn, see close()
+    this._terminateAllOutstandingOpsAndClose()
+  }
+
+  _terminateAllOutstandingOpsAndClose() {
+    assert(this._state == STATE_WAITING_FOR_PUBLISHER
+      || this._state == STATE_NORMAL
+      || this._state == STATE_CLOSING)
+    let fromState = this._state
+    this._state = STATE_CLOSED
+    if (fromState == STATE_WAITING_FOR_PUBLISHER) {
+      this._terminateAllOutstandingTakes()
+    } else {
+      this._terminateAllOutstandingSends()
     }
+    this._close(fromState)
+  }
+
+  _close(fromState) {
+    assert(this._buffer.length == 0)
+    this._state = STATE_CLOSED
+    this._triggerWaiters(false)
+    if (fromState == STATE_CLOSING) {
+      this.emit('finish')
+    }
+    this.emit('close')
   }
 
   _takeFromWaitingPublisher() {
@@ -345,7 +347,7 @@ export class Chan {
     }
 
     if (len == 0 && this._state == STATE_CLOSING) {
-      this._close()
+      this._close(STATE_CLOSING)
     } else {
       let bufferSize = this._bufferSize
       if (bufferSize && len >= bufferSize) {
@@ -376,7 +378,7 @@ export class Chan {
     buf.splice(index)
     let len = buf.length
     if (this._state == STATE_CLOSING && buf.length == 0) {
-      this._close()
+      this._close(STATE_CLOSING)
     }
   }
 
@@ -423,7 +425,7 @@ export class Chan {
     }
   }
 
-  _terminateAllWaitingConsumers() {
+  _terminateAllOutstandingTakes() {
     assert(this._buffer.findIndex(x => x.type !== undefined) == -1, 'no publishers')
     let buf = this._buffer
     for (let i = 0; i < buf.length; ++i) {
@@ -433,7 +435,7 @@ export class Chan {
     buf.length = 0
   }
 
-  _terminateAllWaitingPublishers() {
+  _terminateAllOutstandingSends() {
     assert(this._buffer.findIndex(x => x.type === undefined) == -1, 'no consumers')
     let err = new Error('channel closed')
     let buf = this._buffer
