@@ -76,11 +76,6 @@ export function mergeTo(dst, srcs, closeDst) {
           ++i
         } else {
           syncSrcs.splice(i, 1); --totalSyncSrcs
-          if (chan.isClosed) {
-            let index = dataSrcs.indexOf(src)
-            assert(index >= 0)
-            dataSrcs.splice(index, 1); --totalDataSrcs
-          }
         }
       }
     }

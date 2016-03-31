@@ -317,6 +317,141 @@ async t => {
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`performs as much ops as possible synchronously (one input chan)`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let inp = chan()
+  let sent = ''
+
+  inp.send('a').then(v => sent += v)
+  inp.send('b').then(v => sent += v)
+  inp.send('c').then(v => sent += v)
+
+  let m = chan.merge(inp, { output: chan(2) })
+
+  await t.nextTick()
+  t.ok(sent == 'ab')
+
+  t.ok(m.takeSync() == true && m.value == 'a')
+
+  await t.nextTick()
+  t.ok(sent == 'abc')
+
+  t.ok(m.takeSync() == true && m.value == 'b')
+  t.ok(m.takeSync() == true && m.value == 'c')
+  t.ok(m.canTakeSync == false)
+
+  inp.send('d').then(v => sent += v)
+  inp.send('e').then(v => sent += v)
+
+  await t.nextTick()
+  t.ok(sent == 'abcde')
+
+  inp.close().then(_ => sent += '.')
+
+  await t.nextTick()
+  t.ok(sent == 'abcde.')
+
+  t.ok(m.takeSync() == true && m.value == 'd')
+  t.ok(m.takeSync() == true && m.value == 'e')
+  t.ok(m.isClosed == true)
+})
+
+test(`performs as much ops as possible synchronously (one input chan, buffered)`, async t => {
+  let inp = chan(3)
+  
+  inp.sendSync('a')
+  inp.sendSync('b')
+  inp.sendSync('c')
+
+  let m = chan.merge(inp, { output: chan(1) })
+
+  t.ok(m.takeSync() == true && m.value == 'a')
+  t.ok(m.takeSync() == true && m.value == 'b')
+  t.ok(m.takeSync() == true && m.value == 'c')
+  t.ok(m.canTakeSync == false)
+
+  inp.sendSync('d')
+  inp.sendSync('e')
+  inp.close()
+
+  t.ok(m.takeSync() == true && m.value == 'd')
+  t.ok(m.takeSync() == true && m.value == 'e')
+  t.ok(m.isClosed == true)
+})
+
+test(`performs as much ops as possible synchronously (multiple chans, case 1)`, async t => {
+  let a = chan(2)
+  let b = chan(2)
+
+  a.sendSync('a-1')
+  a.sendSync('a-2')
+
+  let m = chan.merge(a, b, { output: chan(2) })
+
+  t.ok(m.takeSync() == true && m.value == 'a-1')
+  t.ok(m.takeSync() == true && m.value == 'a-2')
+  t.ok(m.takeSync() == false)
+
+  b.sendSync('b-1')
+  b.sendSync('b-2')
+  b.sendSync('b-3')
+
+  t.ok(m.takeSync() == true && m.value == 'b-1')
+  t.ok(m.takeSync() == true && m.value == 'b-2')
+  t.ok(m.takeSync() == true && m.value == 'b-3')
+  t.ok(m.takeSync() == false)
+
+  a.sendSync('a-3') // these should be merged in order, as the output is buffered,
+  b.sendSync('b-4') // and buffer is empty, so merge should take and send them as
+  a.sendSync('a-4') // soon as it sees that it can take synchronously
+
+  t.ok(m.takeSync() == true && m.value == 'a-3')
+  t.ok(m.takeSync() == true && m.value == 'b-4')
+  t.ok(m.takeSync() == true && m.value == 'a-4')
+  t.ok(m.takeSync() == false)
+
+  a.sendSync('a-5')
+  b.sendSync('b-5')
+
+  a.close()
+  b.close()
+
+  t.ok(m.takeSync() == true && m.value == 'a-5')
+  t.ok(m.takeSync() == true && m.value == 'b-5')
+  t.ok(m.isClosed == true)
+})
+
+test(`performs as much ops as possible synchronously (multiple chans, case 2)`, async t => {
+  let a = chan(1)
+  let b = chan(2)
+  let c = chan(3)
+
+  a.sendSync('a-1')
+  b.sendSync('b-1')
+  b.sendSync('b-2')
+  c.sendSync('c-1')
+  c.sendSync('c-2')
+  c.sendSync('c-3')
+
+  a.close()
+  b.close()
+  c.close()
+
+  let m = chan.merge(a, b, c, { output: chan(6) })
+
+  t.ok(a.isClosed == true && b.isClosed == true && c.isClosed == true)
+
+  let values = []; for (let i = 0; i < 6; ++i) {
+    t.ok(m.takeSync() == true)
+    values.push(m.value)
+  }
+
+  ['a-1', 'b-1', 'b-2', 'c-1', 'c-2', 'c-3'].forEach(v => {
+    t.ok(values.indexOf(v) >= 0)
+  })
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 test(`when any timeout chan becomes expired, starts yielding errors (case 1)`, async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
   let tm = chan.timeout(100)
