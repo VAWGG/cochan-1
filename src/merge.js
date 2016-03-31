@@ -126,7 +126,7 @@ export function mergeTo(dst, srcs, closeDst) {
     }
     inSyncRegion = false
     assert(canSendSync || canTakeMore)
-    if (!totalDataSrcs) {
+    if (!totalDataSrcs && !totalTimeoutSrcs) {
       // no srcs left alive => end merging
       end()
     } else if (canTakeMore) {
@@ -165,7 +165,7 @@ export function mergeTo(dst, srcs, closeDst) {
     let index = dataSrcs.indexOf(src)
     assert(index >= 0)
     dataSrcs.splice(index, 1)
-    if (!--totalDataSrcs && !inSyncRegion) {
+    if (!--totalDataSrcs && !totalTimeoutSrcs && !inSyncRegion) {
       end()
     }
   }
