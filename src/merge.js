@@ -35,6 +35,7 @@ export function mergeTo(dst, srcs, closeDst) {
   let syncSrcs = arrayPool.take()
   let totalDataSrcs = dataSrcs.length
   let totalTimeoutSrcs = timeoutSrcs.length
+  let inSyncRegion = false
 
   maybeSendNext(undefined)
   return dst
@@ -97,6 +98,7 @@ export function mergeTo(dst, srcs, closeDst) {
     let canSendSync = dst.canSendSync
     let canTakeMore = true
     let clearSyncState = true
+    inSyncRegion = true
     while (canSendSync && canTakeMore) {
       let syncResult; if (syncSrc) {
         syncResult = syncSrc.chan._takeSync()
@@ -122,6 +124,7 @@ export function mergeTo(dst, srcs, closeDst) {
         canSendSync = dst.canSendSync
       }
     }
+    inSyncRegion = false
     assert(canSendSync || canTakeMore)
     if (!totalDataSrcs) {
       // no srcs left alive => end merging
@@ -162,7 +165,9 @@ export function mergeTo(dst, srcs, closeDst) {
     let index = dataSrcs.indexOf(src)
     assert(index >= 0)
     dataSrcs.splice(index, 1)
-    if (!--totalDataSrcs) end()
+    if (!--totalDataSrcs && !inSyncRegion) {
+      end()
+    }
   }
 
   function end() {

@@ -75,7 +75,6 @@ test(`given one chan, yields the same values as the chan itself would`, async t 
   chan.merge(src, { output: dst })
 
   let timeline = ''
-
   consume(dst, v => timeline += str(v))
 
   await t.nextTurn()
@@ -97,6 +96,25 @@ test(`given one chan, yields the same values as the chan itself would`, async t 
   await t.nextTick()
 
   t.ok(timeline == 'xy(oops).')
+})
+
+test(`given one chan, yields the same values as the chan itself would (buffered chan)`, async t => {
+  let src = chan(3)
+  let dst = chan()
+
+  src.sendSync('a')
+  src.sendSync('b')
+  src.sendSync('c')
+  src.close()
+  
+  chan.merge(src, { output: dst })
+
+  t.is('a', await dst.take())
+  t.is('b', await dst.take())
+  t.is('c', await dst.take())
+
+  t.ok(dst.isClosed == true)
+  t.is(chan.CLOSED, await dst.take())
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
