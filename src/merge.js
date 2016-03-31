@@ -57,16 +57,13 @@ export function mergeTo(dst, srcs, closeDst) {
       // the current event loop tick
       syncSrcs.length = 0
       let i = 0; while (i < totalDataSrcs) {
-        let src = dataSrcs[i], {chan} = src
-        if (chan.isClosed) {
-          dataSrcs.splice(i, 1)
-          --totalDataSrcs
-        } else {
-          if (chan.canTakeSync) {
-            syncSrcs.push(src)
-          }
-          ++i
+        let src = dataSrcs[i]
+        // otherwise, src would have been removed from the list, see onSrcClosed()
+        assert(src.chan.isClosed == false)
+        if (src.chan.canTakeSync) {
+          syncSrcs.push(src)
         }
+        ++i
       }
       totalSyncSrcs = syncSrcs.length
     } else {
@@ -157,9 +154,7 @@ export function mergeTo(dst, srcs, closeDst) {
   }
 
   function onSrcClosed(src) {
-    if (dataSrcs === EMPTY) {
-      return // already ended
-    }
+    assert(dataSrcs !== EMPTY) // otherwise this event would not be received, see end()
     src.chan.removeListener('closed', src.onClosed)
     let index = dataSrcs.indexOf(src)
     assert(index >= 0)
