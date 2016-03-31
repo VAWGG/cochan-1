@@ -217,6 +217,65 @@ test(`doesn't consume anything until output can receive data (case 2)`, async t 
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`stops consuming values when output gets closed (case 1)`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan(1)
+  ch.sendSync('x')
+  ch.close()
+
+  let m = chan.merge(ch, { output: chan() })
+  t.ok(m.closeSync() == true)
+
+  await t.nextTurn()
+  t.ok(ch.takeSync() && ch.value == 'x')
+  t.ok(ch.isClosed == true)
+})
+
+test(`stops consuming values when output gets closed (case 2)`, async t => {
+  let ch = chan(2)
+
+  ch.sendSync('x')
+  ch.sendSync('y')
+
+  let m = chan.merge(ch, { output: chan(1) })
+  m.closeNow()
+
+  await t.nextTurn()
+  t.ok(ch.takeSync() && ch.value == 'y')
+})
+
+test(`stops consuming values when output gets closed (case 3)`, async t => {
+  let ch = chan(1)
+  ch.sendSync('x')
+
+  let tm = chan.timeout(10)
+  await t.sleep(11)
+
+  let m = chan.merge(ch, tm, { output: chan() })
+  t.ok(m.closeSync() == true)
+
+  await t.nextTurn()
+  t.ok(ch.takeSync() && ch.value == 'x')
+})
+
+test(`is nop when output is closed at time of the call`, async t => {
+  let dst = chan()
+  dst.closeSync()
+
+  let ch1 = chan(1)
+  ch1.sendSync('x')
+
+  let ch2 = chan(1)
+  ch2.sendSync('y')
+
+  let m = chan.merge(ch1, ch2, { output: dst })
+  await t.nextTurn()
+
+  t.ok(ch1.takeSync() && ch1.value == 'x')
+  t.ok(ch2.takeSync() && ch2.value == 'y')
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 test.skip(`allows consuming values synchronously`, async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
   let a = chan(3)
@@ -464,7 +523,29 @@ test(`when any timeout chan becomes expired, starts yielding errors (case 1)`, a
   t.is('x', await m.take())
 
   await t.sleep(101)
-  await t.throws(m.take(), /timeout/)
+
+  for (let i = 0; i < 10; ++i) {
+    await t.throws(m.take(), /timeout/)
+  }
+})
+
+test(`when any timeout chan becomes expired, starts yielding errors (multiple timeouts, case 1)`,
+async t => {
+  let tm1 = chan.timeout(200)
+  let tm2 = chan.timeout(100, `ururu`)
+  let ch = chan(2)
+  let m = chan.merge(ch, tm1, tm2, { output: chan() })
+
+  ch.sendSync('x')
+  ch.sendSync('y')
+
+  t.is('x', await m.take())
+
+  await t.sleep(101)
+
+  for (let i = 0; i < 10; ++i) {
+    await t.throws(m.take(), /ururu/)
+  }
 })
 
 test(`when any timeout chan becomes expired, starts yielding errors (case 2)`, async t => {
@@ -480,6 +561,44 @@ test(`when any timeout chan becomes expired, starts yielding errors (case 2)`, a
 
   await t.sleep(1)
   t.ok(recv && recv.error instanceof Error && /timeout/.test(recv.error.message))
+
+  for (let i = 0; i < 10; ++i) {
+    await t.throws(m.take(), /timeout/)
+  }
+})
+
+test(`when any timeout chan becomes expired, starts yielding errors (multiple timeouts, case 2)`,
+async t => {
+  let tm1 = chan.timeout(200)
+  let tm2 = chan.timeout(100, 'ururu')
+  let ch = chan()
+  let m = chan.merge(ch, tm1, tm2, { output: chan() })
+
+  let recv = NOT_YET
+  m.take().then(v => recv = { value: v }).catch(e => recv = { error: e })
+
+  await t.sleep(99)
+  t.ok(recv == NOT_YET)
+
+  await t.sleep(1)
+  t.ok(recv && recv.error instanceof Error && /ururu/.test(recv.error.message))
+
+  for (let i = 0; i < 10; ++i) {
+    await t.throws(m.take(), /ururu/)
+  }
+})
+
+test.skip(`when any timeout chan becomes expired, starts yielding errors (sync take)`, async t => {
+  let tm = chan.timeout(100)
+  let ch = chan(2)
+  let m = chan.merge(ch, tm, { output: chan() })
+
+  ch.sendSync('x')
+  await t.sleep(101)
+
+  for (let i = 0; i < 10; ++i) {
+    t.throws(() => m.takeSync(), /timeout/)
+  }
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
