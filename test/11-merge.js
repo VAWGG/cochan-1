@@ -41,8 +41,6 @@ test(`chan.merge(...chans[, opts]) merges output of multiple chans into one, and
   await t.nextTick()
   t.ok(timeline == 'a')
 
-  return
-
   await srcB.send('b')
   await t.nextTick()
   t.ok(timeline == 'ab')
