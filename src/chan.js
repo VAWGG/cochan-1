@@ -296,6 +296,7 @@ export class Chan {
     fn.promise = promise
     this._waiters.push(fn)
 
+    this.emit('closing')
     return promise
   }
 

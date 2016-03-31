@@ -526,3 +526,105 @@ test(`#close() contention is handled properly on a buffered chan`, async t => {
 
   await closed1; await closed2
 })
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`chan that starts closing synchronously emits 'closing' event, and emits 'closed' once ` +
+  `closing is finished`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch, events, makeChan = (bufferSize) => {
+    ch = chan(bufferSize)
+    ch.on('closing', () => events += '[closing]')
+    ch.on('closed', () => events += '[closed]')
+    events = ''
+  }
+
+  let assertEvents = async events => {
+    t.ok(events == events)
+    await t.nextTurn()
+    t.ok(events == events)
+  }
+
+  makeChan(1)
+  await assertEvents('')
+  ch.sendSync('x')
+
+  ch.close()
+  await assertEvents('[closing]')
+
+  ch.takeSync()
+  await assertEvents('[closing][closed]')
+
+  makeChan(0)
+  await assertEvents('')
+  ch.send('x')
+  await t.nextTick()
+  
+  ch.close()
+  await assertEvents('[closing]')
+
+  ch.takeSync()
+  await assertEvents('[closing][closed]')
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`chan that gets closed immediately emits only 'closed' event (synchronously)`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch, events, makeChan = (bufferSize) => {
+    ch = chan(bufferSize)
+    ch.on('closing', () => events += '[closing]')
+    ch.on('closed', () => events += '[closed]')
+    events = ''
+  }
+
+  let assertEvents = async events => {
+    t.ok(events == events)
+    await t.nextTurn()
+    t.ok(events == events)
+  }
+
+  makeChan(0)
+  await assertEvents('')
+  ch.close()
+  await assertEvents('[closed]')
+  
+  makeChan(0)
+  await assertEvents('')
+  ch.closeSync()
+  await assertEvents('[closed]')
+
+  makeChan(0)
+  await assertEvents('')
+  ch.closeNow()
+  await assertEvents('[closed]')
+
+  makeChan(0)
+  await assertEvents('')
+  ch.take(); await t.nextTick()
+  ch.close()
+  await assertEvents('[closed]')
+  
+  makeChan(0)
+  await assertEvents('')
+  ch.take(); await t.nextTick()
+  ch.closeSync()
+  await assertEvents('[closed]')
+
+  makeChan(0)
+  await assertEvents('')
+  ch.take(); await t.nextTick()
+  ch.closeNow()
+  await assertEvents('[closed]')
+
+  makeChan(1)
+  await assertEvents('')
+  ch.sendSync('x')
+  ch.closeNow()
+  await assertEvents('[closed]')
+
+  makeChan(0)
+  await assertEvents('')
+  ch.send('x')
+  await t.nextTick()
+  ch.closeNow()
+  await assertEvents('[closed]')
+})
