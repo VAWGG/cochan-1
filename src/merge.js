@@ -17,7 +17,7 @@ export function mergeTo(dst, srcs, closeDst) {
   for (let i = 0; i < srcs.length; ++i) {
     let chan = srcs[i]
     if (!chan.isClosed) {
-      let src = withHandlers(onMaybeCanTakeSync, onClosed, { chan,
+      let src = withHandlers(onMaybeCanTakeSync, onSrcClosed, { chan,
         subscribed: false,
         onMaybeCanTakeSync: undefined,
         onClosed: undefined
@@ -152,7 +152,7 @@ export function mergeTo(dst, srcs, closeDst) {
     maybeSendNext(src.chan.canTakeSync ? src : undefined)
   }
 
-  function onClosed(src) {
+  function onSrcClosed(src) {
     if (dataSrcs === EMPTY) {
       return // already ended
     }
@@ -191,8 +191,8 @@ function subscribeForSrcs(srcs) {
   }
 }
 
-function withHandlers(onMaybeCanTakeSync, onClosed, src) {
+function withHandlers(onMaybeCanTakeSync, onSrcClosed, src) {
   src.onMaybeCanTakeSync = isClosed => onMaybeCanTakeSync(src, isClosed)
-  src.onClosed = () => onClosed(src)
+  src.onClosed = () => onSrcClosed(src)
   return src
 }
