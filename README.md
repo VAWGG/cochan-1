@@ -793,34 +793,34 @@ Send-only channels allow producing into a channel (sync & async), and closing a 
 ## Test coverage (WIP)
 
 Please note that functions coverage numbers are currently incorrect (less
-than expected) due to [an issue in nyc].
+than expected) due to [an issue in nyc/istanbul].
 
 ```
 ---------------------|----------|----------|----------|----------|
 File                 |  % Stmts | % Branch |  % Funcs |  % Lines |
 ---------------------|----------|----------|----------|----------|
- src/                |    63.18 |    52.79 |    54.61 |    63.64 |
-  chan.js            |    98.73 |    95.95 |      100 |    98.68 |
-  constants.js       |    86.67 |      100 |      100 |    85.71 |
-  event-emitter.js   |    19.54 |     8.33 |     7.14 |    22.08 |
-  index.js           |    63.58 |     37.5 |    43.48 |    62.94 |
+ src/                |    75.07 |    63.35 |    67.35 |    75.46 |
+  chan.js            |    95.69 |    93.78 |      100 |    95.55 |
+  constants.js       |    93.33 |      100 |      100 |    92.86 |
+  event-emitter.js   |    45.98 |    33.33 |    35.71 |    49.35 |
+  index.js           |    80.23 |    58.65 |    58.33 |    79.88 |
   iterator.js        |    13.25 |        0 |        0 |    13.58 |
-  merge.js           |     9.57 |        0 |        0 |     9.82 |
+  merge.js           |      100 |    96.92 |      100 |      100 |
   pool.js            |    86.21 |     62.5 |      100 |    86.21 |
   pools.js           |      100 |      100 |      100 |      100 |
-  schedule.js        |    52.94 |       50 |       50 |    53.85 |
+  schedule.js        |    47.06 |       50 |        0 |    53.85 |
   select.js          |    98.06 |    96.59 |      100 |    98.01 |
-  special-chans.js   |    73.81 |    52.27 |       75 |    74.75 |
+  special-chans.js   |    70.97 |     49.3 |    80.95 |    71.77 |
   thenable.js        |    94.59 |       64 |    88.89 |    94.59 |
-  unidirectional.js  |    19.74 |    16.67 |       50 |    19.74 |
+  unidirectional.js  |       40 |    22.73 |       75 |       40 |
   utils.js           |    63.49 |    32.69 |    45.45 |    64.52 |
   writable-stream.js |     5.88 |        0 |       50 |     5.88 |
 ---------------------|----------|----------|----------|----------|
-All files            |    63.18 |    52.79 |    54.61 |    63.64 |
+All files            |    75.07 |    63.35 |    67.35 |    75.46 |
 ---------------------|----------|----------|----------|----------|
 ```
 
-[an issue in nyc]: https://github.com/bcoe/nyc/issues/198
+[an issue in nyc/istanbul]: https://github.com/bcoe/nyc/issues/198
 
 
 ## TODO
