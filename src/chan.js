@@ -204,51 +204,95 @@ export class Chan {
   }
 
   maybeCanTakeSync() {
+    let promise = this._makePromise()
+    let maybePromise = this._maybeCanTakeSync(this._resolve, true)
+    if (maybePromise) {
+      return maybePromise
+    } else {
+      this._promiseUsed()
+      return promise
+    }
+  }
+
+  maybeCanSendSync() {
+    let promise = this._makePromise()
+    let maybePromise = this._maybeCanSendSync(this._resolve, true)
+    if (maybePromise) {
+      return maybePromise
+    } else {
+      this._promiseUsed()
+      return promise
+    }
+  }
+
+  _maybeCanTakeSync(fn, mayReturnPromise) {
     if (this._state == STATE_CLOSED) {
-      return P_RESOLVED_WITH_FALSE
+      if (mayReturnPromise) {
+        return P_RESOLVED_WITH_FALSE
+      } else {
+        fn(false)
+        return
+      }
     }
 
     if (this.canTakeSync) {
-      return P_RESOLVED_WITH_TRUE
+      if (mayReturnPromise) {
+        return P_RESOLVED_WITH_TRUE
+      } else {
+        fn(true)
+        return
+      }
     }
 
     // STATE_CLOSING should be impossible here, as otherwise this.canTakeSync would be true
     assert(this._state == STATE_NORMAL || this._state == STATE_WAITING_FOR_PUBLISHER)
 
+    let waiters
     if (this._state == STATE_NORMAL) {
       assert(this._buffer.length == 0)
       // there are (maybe) some waiters for opportunity to publish, but no actual publishers
       this._state = STATE_WAITING_FOR_PUBLISHER
-      this._triggerWaiters(true)
+      if (this._waiters.length) {
+        waiters = this._waiters.splice(0)
+      }
     }
 
-    // waiters must be triggered not earlier than on the next tick
-    assert(this._state == STATE_WAITING_FOR_PUBLISHER)
-
-    return new Promise(resolve => this._waiters.push(resolve))
+    this._waiters.push(fn)
+    waiters && triggerWaiters(waiters, true)
   }
 
-  maybeCanSendSync() {
+  _maybeCanSendSync(fn, mayReturnPromise) {
     if (this._state >= STATE_CLOSING) {
-      return P_RESOLVED_WITH_FALSE
+      if (mayReturnPromise) {
+        return P_RESOLVED_WITH_FALSE
+      } else {
+        fn(false)
+        return
+      }
     }
 
     if (this.canSendSync) {
-      return P_RESOLVED_WITH_TRUE
+      if (mayReturnPromise) {
+        return P_RESOLVED_WITH_TRUE
+      } else {
+        fn(true)
+        return
+      }
     }
 
     assert(this._state == STATE_NORMAL || this._state == STATE_WAITING_FOR_PUBLISHER)
 
+    let waiters
     if (this._state == STATE_WAITING_FOR_PUBLISHER) {
       // there are (maybe) some waiters for opportunity to consume, but no actual consumers
       this._state = STATE_NORMAL
-      this._triggerWaiters(true)
+      if (this._waiters.length) {
+        waiters = this._waiters.splice(0)
+      }
     }
-
-    // waiters must be triggered not earlier than on the next tick
-    assert(this._state == STATE_NORMAL)
     
-    return new Promise(resolve => this._waiters.push(resolve))
+    this._waiters.push(fn)
+    waiters && triggerWaiters(waiters, true)
   }
 
   closeSync() {
@@ -447,6 +491,24 @@ export class Chan {
     this._buffer.length = 0
   }
 
+  _makePromise() {
+    let promise = this._promise
+    if (!promise) {
+      this._promise = promise = new Promise((res, rej) => {
+        this._resolve = res
+        this._reject = rej
+      })
+    }
+    return promise
+  }
+
+  _promiseUsed() {
+    assert(this._promise != null)
+    this._promise = undefined
+    this._resolve = undefined
+    this._reject = undefined
+  }
+
   get _constructorName() {
     return 'chan'
   }
@@ -467,3 +529,7 @@ function triggerWaiters(waiters, arg) {
     waiters[i](arg)
   }
 }
+
+Chan.prototype._promise = undefined
+Chan.prototype._resolve = undefined
+Chan.prototype._reject = undefined

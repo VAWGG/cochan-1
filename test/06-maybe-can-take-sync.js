@@ -294,3 +294,74 @@ test(`multiple calls get unblocked by the same send`, async t => {
 
   t.ok(events == '1(true)2(true)3(true)')
 })
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`can be used with #sendSync() for batch flow`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let events = []
+  let ch = chan(2)
+
+  let producer = async items => {
+    let i = 0, n = 10; while (items.length && ++i <= n) {
+      let item = items.shift()
+      if (!ch.sendSync(item)) {
+        events.push(`P(sending ${item})`)
+        await ch.send(item)
+      }
+      events.push(`P(sent ${item})`)
+    }
+    if (i > n) {
+      events.push('P(livelock)')
+    } else {
+      events.push(`P(closing)`)
+      await ch.close()
+      events.push(`P(closed)`)
+    }
+  }
+
+  let consumer = async () => {
+    let i = 0, n = 10; while (++i <= n) {
+      events.push(`C(wait)`)
+
+      if (!await ch.maybeCanTakeSync()) {
+        events.push(`C(closed)`)
+        return
+      }
+
+      while (ch.takeSync() && ++i) {
+        events.push(`C(recv ${ ch.value })`)
+      }
+    }
+    events.push('C(livelock)')
+  }
+
+  let pProduced = producer([ 'a', 'b', 'c', 'd', 'e' ])
+  let pConsumed = consumer()
+
+  await pProduced
+  await pConsumed
+
+  t.same(events, [
+    `P(sent a)`,
+    `P(sent b)`,
+    `P(sending c)`,
+
+    `C(wait)`,
+    `C(recv a)`,
+    `C(recv b)`,
+    `C(recv c)`,
+    `C(wait)`,
+
+    `P(sent c)`,
+    `P(sent d)`,
+    `P(sent e)`,
+    `P(closing)`,
+
+    `C(recv d)`,
+    `C(recv e)`,
+    `C(wait)`,
+
+    `P(closed)`,
+    `C(closed)`,
+  ])
+})

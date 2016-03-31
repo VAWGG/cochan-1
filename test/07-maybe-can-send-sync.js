@@ -266,3 +266,224 @@ test(`multiple calls get unblocked by the same take`, async t => {
 
   t.ok(events == '1(true)2(true)3(true)')
 })
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`can be used with #takeSync() for non-greedy flow`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let events = []
+  let ch = chan()
+
+  let producer = async items => {
+    let i = 0, n = 3; while (items.length && ++i <= n) {
+      if (!ch.canSendSync) {
+        events.push(`P(wait)`)
+        await ch.maybeCanSendSync()
+      }
+      let item = items[0]
+      if (ch.sendSync(item)) {
+        items.shift()
+        events.push(`P(sent ${item})`)
+      } else {
+        events.push(`P(fail)`)
+      }
+    }
+    if (i > n) {
+      events.push('P(livelock)')
+    } else {
+      events.push(`P(closing)`)
+      await ch.close()
+      events.push(`P(closed)`)
+    }
+  }
+
+  let consumer = async () => {
+    let i = 0, n = 3; while (++i <= n) {
+      if (!ch.takeSync()) {
+        events.push(`C(taking)`)
+        if (await ch.take() == chan.CLOSED) {
+          events.push(`C(closed)`)
+          return
+        }
+      }
+      events.push(`C(recv ${ ch.value })`)
+    }
+    events.push('C(livelock)')
+  }
+
+  let pProduced = producer([ 'x', 'y' ])
+  let pConsumed = consumer()
+
+  await pProduced
+  await pConsumed
+
+  t.same(events, [
+    `P(wait)`,
+    `C(taking)`,
+
+    `P(sent x)`,
+    `P(wait)`,
+    `C(recv x)`,
+    `C(taking)`,
+
+    `P(sent y)`,
+    `P(closing)`,
+    `C(recv y)`,
+    `C(taking)`,
+
+    `C(closed)`,
+    `P(closed)`
+  ])
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`can be used with #maybeCanTakeSync() for batch flow`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let events = []
+  let ch = chan(2)
+
+  let producer = async items => {
+    let i = 0, n = 10; while (items.length && ++i <= n) {
+      if (!ch.canSendSync) {
+        events.push(`P(wait)`)
+        await ch.maybeCanSendSync()
+      }
+      let item = items[0]
+      while (item && ch.sendSync(item) && ++i) {
+        items.shift()
+        events.push(`P(sent ${item})`)
+        item = items[0]
+      }
+    }
+    if (i > n) {
+      events.push('P(livelock)')
+    } else {
+      events.push(`P(closing)`)
+      await ch.close()
+      events.push(`P(closed)`)
+    }
+  }
+
+  let consumer = async () => {
+    let i = 0, n = 10; while (++i <= n) {
+      if (ch.isClosed) break
+      if (!ch.canTakeSync) {
+        events.push(`C(wait)`)
+        if (!await ch.maybeCanTakeSync()) break
+      }
+      while (ch.takeSync() && ++i) {
+        events.push(`C(recv ${ ch.value })`)
+      }
+    }
+    if (i > n) {
+      events.push('C(livelock)')
+    } else {
+      events.push(`C(closed)`)
+    }
+  }
+
+  let pProduced = producer([ 'a', 'b', 'c', 'd', 'e' ])
+  let pConsumed = consumer()
+
+  await pProduced
+  await pConsumed
+
+  t.same(events, [
+    `P(sent a)`,
+    `P(sent b)`,
+    `P(wait)`,
+
+    `C(recv a)`,
+    `C(recv b)`,
+    `C(wait)`,
+
+    `P(sent c)`,
+    `P(sent d)`,
+    `P(wait)`,
+
+    `C(recv c)`,
+    `C(recv d)`,
+    `C(wait)`,
+
+    `P(sent e)`,
+    `P(closing)`,
+
+    `C(recv e)`,
+
+    `C(closed)`,
+    `P(closed)`,
+  ])
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`when used with #maybeCanTakeSync() on a non-buffered chan, can result in a livelock`,
+  async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let events = []
+  let ch = chan()
+
+  let producer = async items => {
+    let i = 0, n = 3; while (items.length && ++i <= n) {
+      events.push(`P(wait)`)
+      await ch.maybeCanSendSync()
+      let item = items[0]
+      if (ch.sendSync(item)) {
+        items.shift()
+        events.push(`P(sent ${item})`)
+      } else {
+        events.push(`P(fail ${item})`)
+      }
+    }
+    if (i > n) {
+      events.push('P(livelock)')
+    } else {
+      events.push(`P(closing)`)
+      await ch.close()
+      events.push(`P(closed)`)
+    }
+  }
+
+  let consumer = async () => {
+    let i = 0, n = 3; while (++i <= n) {
+      events.push(`C(wait)`)
+      if (!await ch.maybeCanTakeSync()) {
+        events.push(`C(closed)`)
+        return
+      }
+      if (ch.takeSync()) {
+        events.push(`C(recv ${ ch.value })`)
+      } else {
+        events.push(`C(fail)`)
+      }
+    }
+    events.push('C(livelock)')
+  }
+
+  let pProduced = producer([ 'x', 'y', 'z' ])
+  let pConsumed = consumer()
+
+  await pProduced
+  await pConsumed
+
+  t.same(events, [
+    `P(wait)`,
+    `C(wait)`,
+
+    `P(fail x)`,
+    `P(wait)`,
+
+    `C(fail)`,
+    `C(wait)`,
+
+    `P(fail x)`,
+    `P(wait)`,
+
+    `C(fail)`,
+    `C(wait)`,
+
+    `P(fail x)`,
+    `P(livelock)`,
+
+    `C(fail)`,
+    `C(livelock)`
+  ])
+})
