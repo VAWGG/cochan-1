@@ -1,8 +1,6 @@
 import test from '../helpers'
 import chan from '../../src'
 
-test.timeout(1000)
-
 test(`a waiting publisher can be immediately cancelled`, async t => {
   let ch = chan()
   let cancel = ch._send('x', false, t.fail, t.fail, true)
