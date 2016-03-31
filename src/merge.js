@@ -196,11 +196,3 @@ function withHandlers(onMaybeCanTakeSync, onClosed, src) {
   src.onClosed = () => onClosed(src)
   return src
 }
-
-function makeOnMaybeCanTakeSync(src, onMaybeCanTakeSync) {
-  return isClosed => onMaybeCanTakeSync(src, isClosed)
-}
-
-function onError(err) {
-  setTimeout(() => { throw err }, 0)
-}
