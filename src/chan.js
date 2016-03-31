@@ -155,8 +155,9 @@ export class Chan {
     item.fnVal && item.fnVal(item.value)
 
     if (this._state < STATE_CLOSING && this._buffer.length < this._bufferSize) {
-      this._triggerWaiters(true)
+      let waiters = this._waiters.length ? this._waiters.splice(0) : undefined
       this._needsDrain && this._emitDrain()
+      waiters && triggerWaiters(waiters, this._state < STATE_CLOSING)
     }
 
     if (type == TYPE_ERROR) {
@@ -182,8 +183,9 @@ export class Chan {
         item.fnVal && item.fnVal(item.value) // this may change item.type to TYPE_CANCELLED
         fn && fn(item.value)
         if (this._state == STATE_NORMAL && this._buffer.length < this._bufferSize) {
-          this._triggerWaiters(true)
+          let waiters = this._waiters.length ? this._waiters.splice(0) : undefined
           this._needsDrain && this._emitDrain()
+          waiters && triggerWaiters(waiters, this._state < STATE_CLOSING)
         }
         return nop
       }
@@ -196,8 +198,9 @@ export class Chan {
 
     if (prevState == STATE_NORMAL) {
       // notify all waiters for the opportunity to publish
-      this._triggerWaiters(true)
+      let waiters = this._waiters.length ? this._waiters.splice(0) : undefined
       this._needsDrain && this._emitDrain() // TODO: probably not needed here
+      waiters && triggerWaiters(waiters, this._state < STATE_CLOSING)
     }
 
     return needsCancelFn ? () => { item.fnVal = item.fnErr = undefined } : nop
@@ -331,8 +334,7 @@ export class Chan {
     assert(this._state == STATE_NORMAL)
 
     this._state = STATE_CLOSING
-    // notify all send waiters that chan started closing
-    this._triggerWaiters(false)
+    let waiters = this._waiters.length ? this._waiters.splice(0) : undefined
 
     let resolve, promise = new Promise(res => { resolve = res })
     let fn = _ => resolve()
@@ -341,6 +343,10 @@ export class Chan {
     this._waiters.push(fn)
 
     this.emit('closing')
+    
+    // notify all send waiters that chan started closing
+    waiters && triggerWaiters(waiters, false)
+
     return promise
   }
 
