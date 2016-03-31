@@ -8,7 +8,6 @@ const EMPTY = []
 
 // TODO: create custom chan that knows how to calculate canTakeSync,
 //       takeSync() and propagate maybeCanTakeSync() to srcs
-// TODO: use Zalgo-releasing internal api to wait until can take/send
 
 
 export function mergeTo(dst, srcs, closeDst) {
@@ -129,8 +128,7 @@ export function mergeTo(dst, srcs, closeDst) {
       end()
     } else if (canTakeMore) {
       // dst can't accept more data synchronously => wait until it can, then resume
-      // TODO: add internal API that allows to do without creation of new Promise
-      dst.maybeCanSendSync().then(onMaybeCanSendSync, onError)
+      dst._maybeCanSendSync(onMaybeCanSendSync, false)
     } else {
       // dst can accept more data, but srcs can't provide it => wait until they can
       totalTimeoutSrcs && subscribeForSrcs(timeoutSrcs)
@@ -188,7 +186,7 @@ function subscribeForSrcs(srcs) {
     let src = srcs[i]
     if (!src.subscribed) {
       src.subscribed = true
-      src.chan.maybeCanTakeSync().then(src.onMaybeCanTakeSync, onError)
+      src.chan._maybeCanTakeSync(src.onMaybeCanTakeSync, false)
     }
   }
 }

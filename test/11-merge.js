@@ -64,8 +64,6 @@ test(`chan.merge(...chans[, opts]) merges output of multiple chans into one, and
   t.ok(timeline == 'abcde')
 
   await srcB.close()
-  await t.nextTick()
-  await t.nextTick()
 
   t.ok(timeline == 'abcde.')
 })
@@ -99,7 +97,6 @@ test(`given one chan, yields the same values as the chan itself would`, async t 
 
   src.closeSync()
   await t.nextTick()
-  await t.nextTick()
 
   t.ok(timeline == 'xy(oops).')
 })
@@ -108,22 +105,22 @@ test(`given one chan, yields the same values as the chan itself would`, async t 
 test(`given no chans, or only closed chans, closes dst chan right away`, async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
   let m = chan.merge({ output: chan() })
-  t.ok(m.isClosed, true)
+  t.ok(m.isClosed == true)
 
   let a = chan()
   a.closeSync()
   m = chan.merge(a, { output: chan() })
-  t.ok(m.isClosed, true)
+  t.ok(m.isClosed == true)
 
   let b = chan()
   b.closeSync()
   m = chan.merge(a, b, { output: chan() })
-  t.ok(m.isClosed, true)
+  t.ok(m.isClosed == true)
 
   let c = chan()
   c.closeSync()
   m = chan.merge(a, b, c, { output: chan() })
-  t.ok(m.isClosed, true)
+  t.ok(m.isClosed == true)
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -137,26 +134,12 @@ async t => {
   t.ok(m.isClosed == false)
 
   a.closeSync()
+  await t.nextTick()
 
-  t.is(chan.CLOSED, await m.take())
   t.ok(m.isClosed == true)
 })
 
 test(`when all chans close before yielding any values, closes the output chan (case 2)`,
-async t => {
-  let a = chan()
-  let m = chan.merge(a, { output: chan() })
-
-  await t.nextTurn()
-  t.ok(m.isClosed == false)
-
-  a.closeSync()
-
-  t.is(false, await m.maybeCanTakeSync())
-  t.ok(m.isClosed == true)
-})
-
-test(`when all chans close before yielding any values, closes the output chan (case 3)`,
 async t => {
   let a = chan(0)
   let b = chan(1)
@@ -176,8 +159,8 @@ async t => {
   t.ok(m.isClosed == false)
 
   await c.close()
-  t.is(chan.CLOSED, await m.take())
   t.ok(m.isClosed == true)
+  t.is(chan.CLOSED, await m.take())
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -324,7 +307,6 @@ test(`when output option is not specified, creates a take-only merge channel`, a
   await a.send('x')
   b.sendSync('y')
 
-  await t.nextTick()
   await t.nextTick()
 
   t.ok(timeline == 'xy')
