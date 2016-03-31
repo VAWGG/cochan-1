@@ -324,7 +324,7 @@ export class Chan {
     if (fromState == STATE_CLOSING) {
       this.emit('finish')
     }
-    this.emit('close')
+    this.emit('closed')
   }
 
   _takeFromWaitingPublisher() {
