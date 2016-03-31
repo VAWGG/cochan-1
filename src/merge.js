@@ -11,6 +11,10 @@ const EMPTY = []
 
 
 export function mergeTo(dst, srcs, closeDst) {
+  if (dst.isClosed) {
+    return
+  }
+
   let timeoutSrcs = EMPTY
   let dataSrcs = arrayPool.take()
 
