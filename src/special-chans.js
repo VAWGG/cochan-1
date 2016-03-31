@@ -38,8 +38,12 @@ export class SpecialChan {
     this._throwUnsupported('sending')
   }
 
-  maybeCanSendSync() {
-    return this.isClosed ? P_RESOLVED_WITH_FALSE : P_RESOLVED_WITH_TRUE
+  _maybeCanSendSync(fn, mayReturnPromise) {
+    if (mayReturnPromise) {
+      return this.isClosed ? P_RESOLVED_WITH_FALSE : P_RESOLVED_WITH_TRUE
+    } else {
+      fn(!this.isClosed)
+    }
   }
 
   _addConsumer(cons, needsCancelFn, now) {
@@ -120,14 +124,16 @@ export class SignalChan extends SpecialChan { // mixins: AlwaysActiveChanMixin
     return this._isTriggered
   }
 
-  maybeCanTakeSync() {
+  _maybeCanTakeSync(fn, mayReturnPromise) {
     if (this._isTriggered) {
-      return P_RESOLVED_WITH_TRUE
+      if (mayReturnPromise) {
+        return P_RESOLVED_WITH_TRUE
+      } else {
+        fn(true)
+      }
+    } else {
+      this._take(() => fn(true), undefined, false)
     }
-    return new Promise(resolve => {
-      let fn = () => resolve(true)
-      this._take(fn, undefined, false)
-    })
   }
 
   takeSync() {
@@ -228,14 +234,16 @@ export class TimeoutChan extends SpecialChan { // mixins: DelayChanMixin, Always
     return !this._timeoutDate || schedule.now() >= this._timeoutDate
   }
 
-  maybeCanTakeSync() {
+  _maybeCanTakeSync(fn, mayReturnPromise) {
     if (this.canTakeSync) {
-      return P_RESOLVED_WITH_TRUE
+      if (mayReturnPromise) {
+        return P_RESOLVED_WITH_TRUE
+      } else {
+        fn(true)
+      }
+    } else {
+      this._take(undefined, () => fn(true), false)
     }
-    return new Promise(resolve => {
-      let fn = () => resolve(true)
-      this._take(undefined, fn, false)
-    })
   }
 
   _takeSync() {
@@ -326,17 +334,23 @@ class OneTimeChanMixin {
     return this._state == STATE_MANUALLY_CLOSED
   }
 
-  maybeCanTakeSync() {
+  _maybeCanTakeSync(fn, mayReturnPromise) {
     if (this.canTakeSync) {
-      return P_RESOLVED_WITH_TRUE
+      if (mayReturnPromise) {
+        return P_RESOLVED_WITH_TRUE
+      } else {
+        fn(true); return
+      }
     }
     if (this.isClosed) {
-      return P_RESOLVED_WITH_FALSE
+      if (mayReturnPromise) {
+        return P_RESOLVED_WITH_FALSE
+      } else {
+        fn(false); return
+      }
     }
-    return new Promise(resolve => {
-      let fn = val => resolve(val !== CLOSED)
-      this._addConsumer({ fnVal: fn, fnErr: fn, consumes: false }, false, 0)
-    })
+    let handler = val => fn(val !== CLOSED)
+    this._addConsumer({ fnVal: handler, fnErr: handler, consumes: false }, false, 0)
   }
 
   takeSync() {

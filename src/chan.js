@@ -206,28 +206,6 @@ export class Chan {
     return needsCancelFn ? () => { item.fnVal = item.fnErr = undefined } : nop
   }
 
-  maybeCanTakeSync() {
-    let promise = this._makePromise()
-    let maybePromise = this._maybeCanTakeSync(this._resolve, true)
-    if (maybePromise) {
-      return maybePromise
-    } else {
-      this._promiseUsed()
-      return promise
-    }
-  }
-
-  maybeCanSendSync() {
-    let promise = this._makePromise()
-    let maybePromise = this._maybeCanSendSync(this._resolve, true)
-    if (maybePromise) {
-      return maybePromise
-    } else {
-      this._promiseUsed()
-      return promise
-    }
-  }
-
   _maybeCanTakeSync(fn, mayReturnPromise) {
     if (this._state == STATE_CLOSED) {
       if (mayReturnPromise) {
@@ -497,24 +475,6 @@ export class Chan {
     this._buffer.length = 0
   }
 
-  _makePromise() {
-    let promise = this._promise
-    if (!promise) {
-      this._promise = promise = new Promise((res, rej) => {
-        this._resolve = res
-        this._reject = rej
-      })
-    }
-    return promise
-  }
-
-  _promiseUsed() {
-    assert(this._promise != null)
-    this._promise = undefined
-    this._resolve = undefined
-    this._reject = undefined
-  }
-
   get _constructorName() {
     return 'chan'
   }
@@ -535,7 +495,3 @@ function triggerWaiters(waiters, arg) {
     waiters[i](arg)
   }
 }
-
-Chan.prototype._promise = undefined
-Chan.prototype._resolve = undefined
-Chan.prototype._reject = undefined

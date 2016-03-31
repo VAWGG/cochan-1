@@ -28,8 +28,8 @@ export class TakeOnlyChanProxy {
     return this._chan.canTakeSync
   }
 
-  maybeCanTakeSync() {
-    return this._chan.maybeCanTakeSync()
+  _maybeCanTakeSync(fn, mayReturnPromise) {
+    return this._chan._maybeCanTakeSync(fn, mayReturnPromise)
   }
 
   _takeSync() {
@@ -96,8 +96,12 @@ export class TakeOnlyChanProxy {
     this._throwCannotSend()
   }
 
-  maybeCanSendSync() {
-    return this.isClosed ? P_RESOLVED_WITH_FALSE : P_RESOLVED_WITH_TRUE
+  _maybeCanSendSync(fn, mayReturnPromise) {
+    if (mayReturnPromise) {
+      return this.isClosed ? P_RESOLVED_WITH_FALSE : P_RESOLVED_WITH_TRUE
+    } else {
+      fn(!this.isClosed)
+    }
   }
 
   closeSync() {
@@ -178,8 +182,8 @@ export class SendOnlyChanProxy {
     return this._chan._send(value, isError, fnVal, fnErr, needsCancelFn)
   }
 
-  maybeCanSendSync() {
-    return this._chan.maybeCanSendSync()
+  _maybeCanSendSync(fn, mayReturnPromise) {
+    return this._chan._maybeCanSendSync(fn, mayReturnPromise)
   }
 
   closeSync() {
@@ -234,8 +238,12 @@ export class SendOnlyChanProxy {
     return false
   }
 
-  maybeCanTakeSync() {
-    return this.isClosed ? P_RESOLVED_WITH_FALSE : P_RESOLVED_WITH_TRUE
+  _maybeCanSendSync(fn, mayReturnPromise) {
+    if (mayReturnPromise) {
+      return this.isClosed ? P_RESOLVED_WITH_FALSE : P_RESOLVED_WITH_TRUE
+    } else {
+      fn(!this.isClosed)
+    }
   }
 
   takeSync() {

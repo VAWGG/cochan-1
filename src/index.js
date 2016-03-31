@@ -1,3 +1,4 @@
+import assert from 'power-assert'
 import {Chan} from './chan'
 import {SpecialChan, SignalChan, TimeoutChan, DelayChan, PromiseChan} from './special-chans'
 import {TakeOnlyChanProxy, SendOnlyChanProxy} from './unidirectional'
@@ -298,6 +299,28 @@ class ChanBaseMixin {
     }
   }
 
+  maybeCanTakeSync() {
+    let promise = this._makePromise()
+    let maybePromise = this._maybeCanTakeSync(this._resolve, true)
+    if (maybePromise) {
+      return maybePromise
+    } else {
+      this._promiseUsed()
+      return promise
+    }
+  }
+
+  maybeCanSendSync() {
+    let promise = this._makePromise()
+    let maybePromise = this._maybeCanSendSync(this._resolve, true)
+    if (maybePromise) {
+      return maybePromise
+    } else {
+      this._promiseUsed()
+      return promise
+    }
+  }
+
   get takeOnly() {
     if (this._takeOnly) {
       return this._takeOnly
@@ -349,6 +372,24 @@ class ChanBaseMixin {
     return this.toString()
   }
 
+  _makePromise() {
+    let promise = this._promise
+    if (!promise) {
+      this._promise = promise = new Promise((res, rej) => {
+        this._resolve = res
+        this._reject = rej
+      })
+    }
+    return promise
+  }
+
+  _promiseUsed() {
+    assert(this._promise != null)
+    this._promise = undefined
+    this._resolve = undefined
+    this._reject = undefined
+  }
+
   get _constructorName() {
     return undefined
   }
@@ -370,6 +411,9 @@ class ChanBaseMixin {
 ChanBaseMixin.prototype.CLOSED = CLOSED
 ChanBaseMixin.prototype._takeOnly = undefined
 ChanBaseMixin.prototype._sendOnly = undefined
+ChanBaseMixin.prototype._promise = undefined
+ChanBaseMixin.prototype._resolve = undefined
+ChanBaseMixin.prototype._reject = undefined
 
 
 function fromIteratorWithOpts(iter, opts, defaults) {
