@@ -159,6 +159,7 @@ export class SignalChan extends SpecialChan { // mixins: AlwaysActiveChanMixin
     if (!this._isTriggered) {
       this._isTriggered = true
       this._value = value
+      this.emit('takeable')
       let consumers = this._consumers
       if (!consumers) return
       this._consumers = undefined
@@ -269,6 +270,7 @@ export class TimeoutChan extends SpecialChan { // mixins: DelayChanMixin, Always
   }
 
   _timeout() {
+    this.emit('takeable')
     let consumers = this._consumers
     if (!consumers) return
     this._consumers = undefined
@@ -282,9 +284,9 @@ export class TimeoutChan extends SpecialChan { // mixins: DelayChanMixin, Always
 
   _triggerNow() {
     if (this._isSubscribed) {
+      this._timeoutDate = 0
       this._unsubscribe()
       this._timeout()
-      this._timeoutDate = 0
     }
   }
 
@@ -404,7 +406,10 @@ class OneTimeChanMixin {
       this._unsubscribe()
     }
     let consumers = this._consumers
-    if (!consumers) return
+    if (!consumers) {
+      this.emit('takeable')
+      return
+    }
     let cIndex = -1
     for (let i = 0; cIndex == -1 && i < consumers.length; ++i) {
       let item = consumers[i]
