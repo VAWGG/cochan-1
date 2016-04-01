@@ -1,6 +1,6 @@
 import assert from 'power-assert'
 import schedule from './schedule'
-import {P_RESOLVED} from './constants'
+import {P_RESOLVED, SEND_TYPE_VALUE} from './constants'
 
 class WritableStreamMixin {
 
@@ -22,13 +22,12 @@ class WritableStreamMixin {
       cb = encoding
       encoding = null
     }
-    if (this.sendSync(chunk)) {
+    if (this._sendSync(chunk, SEND_TYPE_VALUE)) {
       cb && schedule.microtask(cb)
       return true
     }
-    let {promise} = this._send(chunk, false, cb, cb, false)
-    promise && promise.then(cb, cb)
     this._needsDrain = true
+    this._send(chunk, SEND_TYPE_VALUE, cb, cb, false)
     return false
   }
 
