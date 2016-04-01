@@ -26,11 +26,11 @@ export class SpecialChan {
     return false
   }
 
-  _sendSync(value, isError) {
+  _sendSync(value, type) {
     this._throwUnsupported('sending')
   }
 
-  _send(value, isError, fnVal, fnErr, needsCancelFn) {
+  _send(value, type, fnVal, fnErr, needsCancelFn) {
     this._throwUnsupported('sending')
   }
 

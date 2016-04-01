@@ -9,6 +9,7 @@ import {ChanWritableStreamMixin} from './writable-stream'
 import {MergeChan} from './merge'
 import {fromIterator, thenableRunner} from './iterator'
 import {ISCHAN, CLOSED, OP_TAKE, OP_SEND, ERROR} from './constants'
+import {SEND_TYPE_VALUE, SEND_TYPE_ERROR} from './constants'
 import {mixin, describeArray, describeValue, defaultTo, extend, nop} from './utils'
 import {isIterator, isGenerator, isGeneratorFunction} from './utils'
 import schedule from './schedule'
@@ -246,11 +247,11 @@ class ChanBaseMixin {
   }
 
   sendSync(value) {
-    return this._sendSync(value, false)
+    return this._sendSync(value, SEND_TYPE_VALUE)
   }
 
   sendErrorSync(err) {
-    return this._sendSync(err, true)
+    return this._sendSync(err, SEND_TYPE_ERROR)
   }
 
   take() {
@@ -269,20 +270,23 @@ class ChanBaseMixin {
   }
 
   sendNow(value) {
-    this._send(value, false, nop, nop, false)
+    this._send(value, SEND_TYPE_VALUE, nop, nop, false)
   }
 
   sendErrorNow(error) {
-    this._send(error, true, nop, nop, false)
+    this._send(error, SEND_TYPE_ERROR, nop, nop, false)
   }
 
-  send(value, isError) {
+  send(value, type) {
+    if (type === undefined) {
+      type = SEND_TYPE_VALUE
+    }
     let promise = new Thenable(this, OP_SEND)
-    promise._sendData = { value, isError }
+    promise._sendData = { value, type }
     schedule.microtask(() => {
       if (promise._op) {
         let bound = promise._bound
-        let cancel = this._send(value, isError, bound.fulfill, bound.reject, true)
+        let cancel = this._send(value, type, bound.fulfill, bound.reject, true)
         // the previous line might have already cancelled this promise, so we need to check
         if (promise._op) {
           promise._cancel = cancel

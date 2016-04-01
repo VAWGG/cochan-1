@@ -80,7 +80,7 @@ export class TakeOnlyChanProxy {
     return false
   }
 
-  _sendSync(value) {
+  _sendSync(value, type) {
     this._throwCannotSend()
   }
 
@@ -92,7 +92,7 @@ export class TakeOnlyChanProxy {
     this._throwCannotSend()
   }
 
-  _send(value, isError, fnVal, fnErr, needsCancelFn) {
+  _send(value, type, fnVal, fnErr, needsCancelFn) {
     this._throwCannotSend()
   }
 
@@ -178,8 +178,12 @@ export class SendOnlyChanProxy {
     return this._chan.canSendSync
   }
 
-  _send(value, isError, fnVal, fnErr, needsCancelFn) {
-    return this._chan._send(value, isError, fnVal, fnErr, needsCancelFn)
+  _send(value, type, fnVal, fnErr, needsCancelFn) {
+    return this._chan._send(value, type, fnVal, fnErr, needsCancelFn)
+  }
+
+  _sendSync(value, type) {
+    return this._chan._sendSync(value, type)
   }
 
   _maybeCanSendSync(fn, mayReturnPromise) {

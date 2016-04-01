@@ -18,6 +18,10 @@ export const ERROR = { value: undefined }
 export const OP_SEND = 1|0
 export const OP_TAKE = 2|0
 
+export const SEND_TYPE_VALUE = 0
+export const SEND_TYPE_ERROR = 1
+export const SEND_TYPE_INTENT = 2
+
 export const THENABLE_MIXED_USE_MSG = `Select operations expect that the results of ` +
   `chan::take() or chan::send() are passed to select()/selectSync() immediately, and ` +
   `used solely for this purpose. When using take()/send() with select operations, don't ` +
