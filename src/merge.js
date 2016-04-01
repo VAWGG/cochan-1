@@ -3,11 +3,10 @@ import {Chan} from './chan'
 import {arrayPool} from './pools'
 import {TimeoutChan} from './special-chans'
 import {CLOSED, FAILED, ERROR} from './constants'
+import {P_RESOLVED_WITH_TRUE, P_RESOLVED_WITH_FALSE} from './constants'
 
 const EMPTY = []
 
-// TODO: implement custom maybeCanTakeSync() that considers merge operation specifics.
-//
 export class MergeChan extends Chan {
 
   constructor(srcs, bufferSize, closeOnFinish) {
@@ -133,6 +132,28 @@ export class MergeChan extends Chan {
       this._value = result
     }
     return result
+  }
+
+  _maybeCanTakeSync(fn, mayReturnPromise) {
+    let result = super._maybeCanTakeSync(fn, true)
+    if (result === P_RESOLVED_WITH_TRUE) {
+      if (mayReturnPromise) {
+        return result
+      } else {
+        fn(true)
+        return
+      }
+    }
+    if (result === P_RESOLVED_WITH_FALSE) {
+      if (mayReturnPromise) {
+        return result
+      } else {
+        fn(false)
+        return
+      }
+    }
+    this._totalTimeoutSrcs && this._subscribeForSrcs(this._timeoutSrcs)
+    this._totalDataSrcs && this._subscribeForSrcs(this._dataSrcs)
   }
 
   _takeNextSync(clearState) {

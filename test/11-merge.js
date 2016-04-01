@@ -500,8 +500,71 @@ test(`performs as much ops as possible synchronously (multiple chans, case 2)`, 
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-test.todo(`propagates #maybeCanTakeSync() to sources`)
+test(`propagates #maybeCanTakeSync() to sources (case 1)`, async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+  let a = chan()
+  let b = chan()
+  let m = chan.merge(a, b)
+  
+  let events = ''
+
+  a.maybeCanSendSync().then(alive => events += `S(a, ${alive})`).catch(t.fail)
+  b.maybeCanSendSync().then(alive => events += `S(b, ${alive})`).catch(t.fail)
+
+  await t.nextTurn()
+  t.ok(events == '')
+
+  m.maybeCanTakeSync().then(alive => events += `T(m, ${alive})`).catch(t.fail)
+
+  await t.nextTick()
+  t.ok(events == 'S(a, true)S(b, true)T(m, true)')
+})
+
+test(`propagates #maybeCanTakeSync() to sources (case 2)`, async t => {
+  let a = chan()
+  let m = chan.merge(a)
+
+  let pS = a.maybeCanSendSync().then(alive => {
+    if (!alive) {
+      return t.fail(`a unexpectedly closed`)
+    }
+    a.sendNow('x')
+  })
+  .catch(t.fail)
+
+  let pT = m.maybeCanTakeSync().then(alive => {
+    if (!alive) {
+      return t.fail(`m unexpectedly closed`)
+    }
+    if (!m.takeSync()) {
+      return t.fail(`sync take failed`)
+    }
+    t.ok(m.value == 'x')
+  })
+  .catch(t.fail)
+
+  await Promise.all([ pS, pT ])
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`#maybeCanTakeSync() works normally`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let a = chan()
+  let b = chan()
+
+  a.maybeCanSendSync().then(t.fail.with(`a.maybeCanSendSync()`)).catch(t.fail)
+  b.maybeCanSendSync().then(t.fail.with(`b.maybeCanSendSync()`)).catch(t.fail)
+
+  let m = chan.merge(a, b)
+  m.sendNow('x')
+  t.is(true, await m.maybeCanTakeSync())
+
+  m.close()
+  t.ok(m.takeSync() && m.value == 'x')
+  t.ok(m.isClosed)
+
+  t.is(false, await m.maybeCanTakeSync())
+})
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 test(`when any timeout chan becomes expired, starts yielding errors (case 1)`, async t => {
