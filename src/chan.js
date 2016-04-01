@@ -408,7 +408,7 @@ export class Chan {
     assert(this._state == STATE_NORMAL || this._state == STATE_CLOSING)
     // the send cannot be buffered
     assert(index >= this._bufferSize)
-    buf.splice(index)
+    buf.splice(index, 1)
     let len = buf.length
     if (this._state == STATE_CLOSING && buf.length == 0) {
       this._close(STATE_CLOSING)

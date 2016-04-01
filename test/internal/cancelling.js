@@ -18,6 +18,15 @@ test(`a waiting publisher can be cancelled later`, async t => {
   await t.sleep(50)
 })
 
+test(`cancelling a publisher doesn't cancel another ones`, async t => {
+  let ch = chan()
+  let cancelX = ch._send('x', false, t.nop, t.nop, true)
+  let cancelY = ch._send('y', false, t.nop, t.nop, true)
+  cancelX()
+  t.ok(ch.takeSync() && ch.value == 'y')
+  await ch.close()
+})
+
 test(`cancelled publishers don't block closing`, async t => {
   let ch = chan()
   let cancelX = ch._send('x', false, t.nop, t.nop, true)
