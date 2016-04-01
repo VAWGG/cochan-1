@@ -128,10 +128,12 @@ export class MergeChan extends Chan {
     let result = this._takeNextSync(true)
     if (result === FAILED) {
       return false
-    } else if (result !== ERROR) {
+    } else if (result === ERROR) {
+      return result
+    } else {
       this._value = result
+      return true
     }
-    return result
   }
 
   _maybeCanTakeSync(fn, mayReturnPromise) {
