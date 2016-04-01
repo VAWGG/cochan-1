@@ -1,5 +1,59 @@
 import {ISCHAN, P_RESOLVED_WITH_FALSE, P_RESOLVED_WITH_TRUE} from './constants'
 import schedule from './schedule'
+import {mixin} from './utils'
+
+
+class UnidirectionalProxyBase {
+
+  get _ischan() {
+    return ISCHAN
+  }
+
+  withDesc(desc) {
+    return withDesc(desc, this)
+  }
+
+  // event emitter proxy
+
+  addListener(event, fn) {
+    this._chan.addListener(event, fn)
+    return this
+  }
+
+  on(event, fn) {
+    this._chan.on(event, fn)
+    return this
+  }
+
+  addListenerOnce(event, fn) {
+    this._chan.addListenerOnce(event, fn)
+    return this
+  }
+
+  once(event, fn) {
+    this._chan.once(event, fn)
+    return this
+  }
+
+  removeListener(event, fn) {
+    this._chan.removeListener(event, fn)
+    return this
+  }
+
+  removeAllListeners(event) {
+    this._chan.removeAllListeners(event)
+    return this
+  }
+
+  listenerCount(event) {
+    return this._chan.listenerCount(event)
+  }
+
+  listeners(event) {
+    return this._chan.listeners(event)
+  }
+
+}
 
 
 export class TakeOnlyChanProxy {
@@ -52,16 +106,8 @@ export class TakeOnlyChanProxy {
     return '<-' + this._chan._displayFlags
   }
 
-  withDesc(desc) {
-    return withDesc(desc, this)
-  }
-
   get _desc() {
     return this.__desc || prependDescFlags('<-', this._chan._desc)
-  }
-
-  get _ischan() {
-    return ISCHAN
   }
 
   get takeOnly() {
@@ -214,16 +260,8 @@ export class SendOnlyChanProxy {
     return '->' + this._chan._displayFlags
   }
 
-  withDesc(desc) {
-    return withDesc(desc, this)
-  }
-
   get _desc() {
     return this.__desc || prependDescFlags('->', this._chan._desc)
-  }
-
-  get _ischan() {
-    return ISCHAN
   }
 
   get sendOnly() {
@@ -308,3 +346,7 @@ function withDesc(desc, ch) {
   }
   return ch
 }
+
+
+mixin(TakeOnlyChanProxy, UnidirectionalProxyBase.prototype)
+mixin(SendOnlyChanProxy, UnidirectionalProxyBase.prototype)
