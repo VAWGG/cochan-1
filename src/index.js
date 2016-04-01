@@ -268,6 +268,14 @@ class ChanBaseMixin {
     return promise
   }
 
+  sendNow(value) {
+    this._send(value, false, nop, nop, false)
+  }
+
+  sendErrorNow(error) {
+    this._send(error, true, nop, nop, false)
+  }
+
   send(value, isError) {
     let promise = new Thenable(this, OP_SEND)
     promise._sendData = { value, isError }
