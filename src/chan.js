@@ -66,12 +66,15 @@ export class Chan {
 
     assert(this._state == STATE_NORMAL)
 
-    if (this._buffer.length < this._bufferSize) {
+    let len = this._buffer.length
+    if (len < this._bufferSize) {
       this._buffer.push({ value, type, fnVal: undefined, fnErr: undefined })
-      if (wasWaitingForPublisher) {
-        // notify all waiters for opportunity to consume
-        this._triggerWaiters(true)
+      let waiters; if (wasWaitingForPublisher && this._waiters.length) {
+        waiters = this._waiters.splice(0)
       }
+      if (len == 0) this.emit('takeable')
+      // notify all waiters for opportunity to consume
+      if (waiters) triggerWaiters(waiters, this._state != STATE_CLOSED)
       return true
     }
 
@@ -103,8 +106,8 @@ export class Chan {
     assert(this._state == STATE_NORMAL)
 
     let cancel
-
-    if (this._buffer.length < this._bufferSize) {
+    let len = this._buffer.length
+    if (len < this._bufferSize) {
       this._buffer.push({ value, type, fnVal: undefined, fnErr: undefined })
       cancel = nop
       fnVal(value)
@@ -114,9 +117,12 @@ export class Chan {
       this._buffer.push(item)
     }
 
-    if (wasWaitingForPublisher) {
-      this._triggerWaiters(true)
+    let waiters; if (wasWaitingForPublisher && this._waiters.length) {
+      waiters = this._waiters.splice(0)
     }
+
+    if (len == 0) this.emit('takeable')
+    if (waiters) triggerWaiters(waiters, this._state != STATE_CLOSED)
     
     return cancel
   }
@@ -144,10 +150,20 @@ export class Chan {
       return false
     }
 
-    if (this._state < STATE_CLOSING && this._buffer.length < this._bufferSize) {
-      let waiters = this._waiters.length ? this._waiters.splice(0) : undefined
-      this._needsDrain && this._emitDrain()
-      waiters && triggerWaiters(waiters, this._state < STATE_CLOSING)
+    let waiters; if (this._state < STATE_CLOSING && this._buffer.length < this._bufferSize) {
+      waiters = this._waiters.length ? this._waiters.splice(0) : undefined
+    }
+
+    if (this._buffer.length == 0) {
+      this.emit('empty')
+    }
+
+    if (this._needsDrain && this.canSendSync) {
+      this._emitDrain()
+    }
+
+    if (waiters) {
+      triggerWaiters(waiters, this._state < STATE_CLOSING)
     }
 
     assert(item.type == SEND_TYPE_VALUE || item.type == SEND_TYPE_ERROR)
@@ -171,14 +187,24 @@ export class Chan {
     if (prevState != STATE_WAITING_FOR_PUBLISHER) {
       let item = this._takeFromWaitingPublisher()
       if (item !== FAILED) {
+        let waiters; if (this._state == STATE_NORMAL && this._buffer.length < this._bufferSize) {
+          waiters = this._waiters.length ? this._waiters.splice(0) : undefined
+        }
+        if (this._buffer.length == 0) {
+          this.emit('empty')
+        }
+        if (this._needsDrain && this.canSendSync) {
+          this._emitDrain()
+        }
+        if (waiters) {
+          triggerWaiters(waiters, this._state < STATE_CLOSING)
+        }
         assert(item.type == SEND_TYPE_VALUE || item.type == SEND_TYPE_ERROR)
-        let fn = item.type == SEND_TYPE_VALUE ? fnVal : fnErr
         item.fnVal && item.fnVal(item.value)
-        fn && fn(item.value)
-        if (this._state == STATE_NORMAL && this._buffer.length < this._bufferSize) {
-          let waiters = this._waiters.length ? this._waiters.splice(0) : undefined
-          this._needsDrain && this._emitDrain()
-          waiters && triggerWaiters(waiters, this._state < STATE_CLOSING)
+        if (item.type == SEND_TYPE_VALUE) {
+          fnVal && fnVal(item.value)
+        } else {
+          fnErr && fnErr(item.value)
         }
         return nop
       }
@@ -192,7 +218,7 @@ export class Chan {
     if (prevState == STATE_NORMAL) {
       // notify all waiters for the opportunity to publish
       let waiters = this._waiters.length ? this._waiters.splice(0) : undefined
-      this._needsDrain && this._emitDrain() // TODO: probably not needed here
+      if (this._needsDrain) this._emitDrain() // TODO: probably not needed here
       waiters && triggerWaiters(waiters, this._state < STATE_CLOSING)
     }
 
@@ -409,9 +435,11 @@ export class Chan {
     // the send cannot be buffered
     assert(index >= this._bufferSize)
     buf.splice(index, 1)
-    let len = buf.length
-    if (this._state == STATE_CLOSING && buf.length == 0) {
-      this._close(STATE_CLOSING)
+    if (buf.length == 0) {
+      if (this._state == STATE_CLOSING) {
+        this._close(STATE_CLOSING)
+      }
+      this.emit('empty')
     }
   }
 
