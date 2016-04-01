@@ -19,10 +19,21 @@ function str(v) {
   return v == chan.CLOSED ? '.' : v instanceof Error ? `(${v.message})` : String(v)
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`chan.merge(...chans[, opts]) creates special merge channel`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let a = chan(0).named('A')
+  let b = chan(1).named('B')
+  let T = chan.timeout(1000)
+  let m = chan.merge(a, b, T)
+
+  t.ok(chan.isChan(m) == true)
+  t.ok(m.toString() == 'chan.merge(chan<A>(0), chan<B>(1), chan.timeout(1000))')
+})
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-test(`chan.merge(...chans[, opts]) merges output of multiple chans into one, and closes the ` +
-  `resulting chan only when all sources have closed`, async t => {
+test(`merges output of multiple chans into one, and closes the resulting chan only when ` +
+  `all sources have closed`, async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
   let srcA = chan()
   let srcB = chan()
