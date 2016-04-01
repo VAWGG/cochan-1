@@ -6,8 +6,7 @@ import {CLOSED, FAILED, ERROR} from './constants'
 
 const EMPTY = []
 
-// TODO: implement custom canTakeSync, takeSync() and maybeCanTakeSync()
-// that consider merge operation specifics.
+// TODO: implement custom maybeCanTakeSync() that considers merge operation specifics.
 //
 export class MergeChan extends Chan {
 
@@ -100,6 +99,40 @@ export class MergeChan extends Chan {
       this._totalTimeoutSrcs && this._subscribeForSrcs(this._timeoutSrcs)
       this._totalDataSrcs && this._subscribeForSrcs(this._dataSrcs)
     }
+  }
+
+  get canTakeSync() {
+    if (super.canTakeSync) {
+      return true
+    }
+    let srcs = this._timeoutSrcs
+    let totalSrcs = this._totalTimeoutSrcs
+    for (let i = 0; i < totalSrcs; ++i) {
+      if (srcs[i].chan.canTakeSync) {
+        return true
+      }
+    }
+    srcs = this._dataSrcs
+    totalSrcs = this._totalDataSrcs
+    for (let i = 0; i < totalSrcs; ++i) {
+      if (srcs[i].chan.canTakeSync) {
+        return true
+      }
+    }
+    return false
+  }
+
+  _takeSync() {
+    if (super._takeSync()) {
+      return true
+    }
+    let result = this._takeNextSync(true)
+    if (result === FAILED) {
+      return false
+    } else if (result !== ERROR) {
+      this._value = result
+    }
+    return result
   }
 
   _takeNextSync(clearState) {

@@ -254,7 +254,7 @@ test(`stops consuming values when output gets closed (case 3)`, async t => {
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-test.skip(`allows consuming values synchronously`, async t => {
+test(`allows consuming values synchronously`, async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
   let a = chan(3)
 
@@ -329,7 +329,7 @@ test(`when multiple chans have values, selects the chan to perform take from ran
   t.ok(Math.abs(ctr) < 20)
 })
 
-test.skip(`when multiple chans have values, selects the chan to perform take from randomly (sync take)`,
+test(`when multiple chans have values, selects the chan to perform take from randomly (sync take)`,
 async t => {
   let a = chan(30)
   let b = chan(30)
@@ -489,6 +489,10 @@ test(`performs as much ops as possible synchronously (multiple chans, case 2)`, 
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+test.todo(`propagates #maybeCanTakeSync() to sources`)
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 test(`when any timeout chan becomes expired, starts yielding errors (case 1)`, async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
   let tm = chan.timeout(100)
@@ -566,7 +570,7 @@ async t => {
   }
 })
 
-test.skip(`when any timeout chan becomes expired, starts yielding errors (sync take)`, async t => {
+test(`when any timeout chan becomes expired, starts yielding errors (sync take)`, async t => {
   let tm = chan.timeout(100)
   let ch = chan(2)
   let m = chan.merge(ch, tm)
