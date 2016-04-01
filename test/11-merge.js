@@ -24,12 +24,10 @@ function str(v) {
 test(`chan.merge(...chans[, opts]) merges output of multiple chans into one, and closes the ` +
   `resulting chan only when all sources have closed`, async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-  let dst = chan()
-
   let srcA = chan()
   let srcB = chan()
 
-  let m = chan.merge(srcA, srcB, { output: dst })
+  let m = chan.merge(srcA, srcB)
   let timeline = ''
 
   consume(m, v => timeline += str(v))
@@ -70,12 +68,10 @@ test(`chan.merge(...chans[, opts]) merges output of multiple chans into one, and
 test(`given one chan, yields the same values as the chan itself would`, async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
   let src = chan()
-  let dst = chan()
-  
-  chan.merge(src, { output: dst })
+  let m = chan.merge(src)
 
   let timeline = ''
-  consume(dst, v => timeline += str(v))
+  consume(m, v => timeline += str(v))
 
   await t.nextTurn()
   t.ok(timeline == '')
@@ -100,42 +96,41 @@ test(`given one chan, yields the same values as the chan itself would`, async t 
 
 test(`given one chan, yields the same values as the chan itself would (buffered chan)`, async t => {
   let src = chan(3)
-  let dst = chan()
 
   src.sendSync('a')
   src.sendSync('b')
   src.sendSync('c')
   src.close()
   
-  chan.merge(src, { output: dst })
+  let m = chan.merge(src)
 
-  t.is('a', await dst.take())
-  t.is('b', await dst.take())
-  t.is('c', await dst.take())
+  t.is('a', await m.take())
+  t.is('b', await m.take())
+  t.is('c', await m.take())
 
-  t.ok(dst.isClosed == true)
-  t.is(chan.CLOSED, await dst.take())
+  t.ok(m.isClosed == true)
+  t.is(chan.CLOSED, await m.take())
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 test(`given no chans, or only closed chans, closes dst chan right away`, async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-  let m = chan.merge({ output: chan() })
+  let m = chan.merge()
   t.ok(m.isClosed == true)
 
   let a = chan()
   a.closeSync()
-  m = chan.merge(a, { output: chan() })
+  m = chan.merge(a)
   t.ok(m.isClosed == true)
 
   let b = chan()
   b.closeSync()
-  m = chan.merge(a, b, { output: chan() })
+  m = chan.merge(a, b)
   t.ok(m.isClosed == true)
 
   let c = chan()
   c.closeSync()
-  m = chan.merge(a, b, c, { output: chan() })
+  m = chan.merge(a, b, c)
   t.ok(m.isClosed == true)
 })
 
@@ -144,7 +139,7 @@ test(`when all chans close before yielding any values, closes the output chan (c
 async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
   let a = chan()
-  let m = chan.merge(a, { output: chan() })
+  let m = chan.merge(a)
 
   await t.nextTurn()
   t.ok(m.isClosed == false)
@@ -164,7 +159,7 @@ async t => {
   a.closeSync()
   b.sendSync('b')
 
-  let m = chan.merge(a, b, c, { output: chan() })
+  let m = chan.merge(a, b, c)
 
   t.is('b', await m.take())
   t.ok(m.isClosed == false)
@@ -188,7 +183,7 @@ test(`doesn't consume anything until output can receive data (case 1)`, async t 
   src.sendSync('b')
   src.sendSync('c')
 
-  let m = chan.merge(src, { output: chan() })
+  let m = chan.merge(src)
   await t.nextTurn()
 
   t.ok(src.canTakeSync && src.takeSync() && src.value == 'a')
@@ -205,7 +200,7 @@ test(`doesn't consume anything until output can receive data (case 2)`, async t 
   src.sendSync('d')
   src.close()
 
-  let m = chan.merge(src, { output: chan() })
+  let m = chan.merge(src)
   
   t.is('a', await m.take())
   t.ok(src.canTakeSync && src.takeSync() && src.value == 'b')
@@ -223,7 +218,7 @@ test(`stops consuming values when output gets closed (case 1)`, async t => {
   ch.sendSync('x')
   ch.close()
 
-  let m = chan.merge(ch, { output: chan() })
+  let m = chan.merge(ch)
   t.ok(m.closeSync() == true)
 
   await t.nextTurn()
@@ -237,7 +232,7 @@ test(`stops consuming values when output gets closed (case 2)`, async t => {
   ch.sendSync('x')
   ch.sendSync('y')
 
-  let m = chan.merge(ch, { output: chan(1) })
+  let m = chan.merge(ch, { bufferSize: 1 })
   m.closeNow()
 
   await t.nextTurn()
@@ -251,28 +246,11 @@ test(`stops consuming values when output gets closed (case 3)`, async t => {
   let tm = chan.timeout(10)
   await t.sleep(11)
 
-  let m = chan.merge(ch, tm, { output: chan() })
+  let m = chan.merge(ch, tm)
   t.ok(m.closeSync() == true)
 
   await t.nextTurn()
   t.ok(ch.takeSync() && ch.value == 'x')
-})
-
-test(`is nop when output is closed at time of the call`, async t => {
-  let dst = chan()
-  dst.closeSync()
-
-  let ch1 = chan(1)
-  ch1.sendSync('x')
-
-  let ch2 = chan(1)
-  ch2.sendSync('y')
-
-  let m = chan.merge(ch1, ch2, { output: dst })
-  await t.nextTurn()
-
-  t.ok(ch1.takeSync() && ch1.value == 'x')
-  t.ok(ch2.takeSync() && ch2.value == 'y')
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -284,7 +262,7 @@ test.skip(`allows consuming values synchronously`, async t => {
   a.sendSync('a2')
   a.sendSync('a3')
 
-  let m = chan.merge(a, { output: chan() })
+  let m = chan.merge(a)
 
   t.ok(m.canTakeSync && m.takeSync() && m.value == 'a1')
   t.ok(m.canTakeSync && m.takeSync() && m.value == 'a2')
@@ -300,7 +278,7 @@ test.skip(`allows consuming values synchronously`, async t => {
 
   a = chan(3)
   let b = chan()
-  m = chan.merge(a, b, { output: chan() })
+  m = chan.merge(a, b)
 
   b.send('b1')
   b.send('b2')
@@ -337,7 +315,7 @@ test(`when multiple chans have values, selects the chan to perform take from ran
     b.sendSync('b')
   }
 
-  let m = chan.merge(a, b, { output: chan() })
+  let m = chan.merge(a, b)
   let ctr = 0
 
   for (let i = 0; i < 30; ++i) {
@@ -361,7 +339,7 @@ async t => {
     b.sendSync('b')
   }
 
-  let m = chan.merge(a, b, { output: chan() })
+  let m = chan.merge(a, b)
   let ctr = 0
 
   for (let i = 0; i < 30; ++i) {
@@ -385,7 +363,7 @@ test(`performs as much ops as possible synchronously (one input chan)`, async t 
   inp.send('b').then(v => sent += v)
   inp.send('c').then(v => sent += v)
 
-  let m = chan.merge(inp, { output: chan(2) })
+  let m = chan.merge(inp, { bufferSize: 2 })
 
   await t.nextTick()
   t.ok(sent == 'ab')
@@ -422,7 +400,7 @@ test(`performs as much ops as possible synchronously (one input chan, buffered)`
   inp.sendSync('b')
   inp.sendSync('c')
 
-  let m = chan.merge(inp, { output: chan(1) })
+  let m = chan.merge(inp, { bufferSize: 1 })
 
   t.ok(m.takeSync() == true && m.value == 'a')
   t.ok(m.takeSync() == true && m.value == 'b')
@@ -445,7 +423,7 @@ test(`performs as much ops as possible synchronously (multiple chans, case 1)`, 
   a.sendSync('a-1')
   a.sendSync('a-2')
 
-  let m = chan.merge(a, b, { output: chan(2) })
+  let m = chan.merge(a, b, { bufferSize: 2 })
 
   t.ok(m.takeSync() == true && m.value == 'a-1')
   t.ok(m.takeSync() == true && m.value == 'a-2')
@@ -496,7 +474,7 @@ test(`performs as much ops as possible synchronously (multiple chans, case 2)`, 
   b.close()
   c.close()
 
-  let m = chan.merge(a, b, c, { output: chan(6) })
+  let m = chan.merge(a, b, c, { bufferSize: 6 })
 
   t.ok(a.isClosed == true && b.isClosed == true && c.isClosed == true)
 
@@ -515,7 +493,7 @@ test(`when any timeout chan becomes expired, starts yielding errors (case 1)`, a
 ////////////////////////////////////////////////////////////////////////////////////////////////////
   let tm = chan.timeout(100)
   let ch = chan(2)
-  let m = chan.merge(ch, tm, { output: chan() })
+  let m = chan.merge(ch, tm)
 
   ch.sendSync('x')
   ch.sendSync('y')
@@ -534,7 +512,7 @@ async t => {
   let tm1 = chan.timeout(200)
   let tm2 = chan.timeout(100, `ururu`)
   let ch = chan(2)
-  let m = chan.merge(ch, tm1, tm2, { output: chan() })
+  let m = chan.merge(ch, tm1, tm2)
 
   ch.sendSync('x')
   ch.sendSync('y')
@@ -551,7 +529,7 @@ async t => {
 test(`when any timeout chan becomes expired, starts yielding errors (case 2)`, async t => {
   let tm = chan.timeout(100)
   let ch = chan()
-  let m = chan.merge(ch, tm, { output: chan() })
+  let m = chan.merge(ch, tm)
 
   let recv = NOT_YET
   m.take().then(v => recv = { value: v }).catch(e => recv = { error: e })
@@ -572,7 +550,7 @@ async t => {
   let tm1 = chan.timeout(200)
   let tm2 = chan.timeout(100, 'ururu')
   let ch = chan()
-  let m = chan.merge(ch, tm1, tm2, { output: chan() })
+  let m = chan.merge(ch, tm1, tm2)
 
   let recv = NOT_YET
   m.take().then(v => recv = { value: v }).catch(e => recv = { error: e })
@@ -591,7 +569,7 @@ async t => {
 test.skip(`when any timeout chan becomes expired, starts yielding errors (sync take)`, async t => {
   let tm = chan.timeout(100)
   let ch = chan(2)
-  let m = chan.merge(ch, tm, { output: chan() })
+  let m = chan.merge(ch, tm)
 
   ch.sendSync('x')
   await t.sleep(101)
@@ -611,7 +589,7 @@ test(`when any of the chans are expired timeout chans, yields error`, async t =>
 
   await t.sleep(10)
 
-  let m1 = chan.merge(tm, { output: chan() })
+  let m1 = chan.merge(tm)
   await t.throws(m1.take(), /out of vodka/)
 
   let m2 = chan.merge(tm, ch)
@@ -628,33 +606,4 @@ test(`when any of the chans are expired timeout chans, yields error`, async t =>
 
   let m6 = chan.merge(chBuf, ch, tm)
   await t.throws(m6.take(), /out of vodka/)
-})
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-test(`when output option is not specified, creates a take-only merge channel`, async t => {
-////////////////////////////////////////////////////////////////////////////////////////////////////
-  let a = chan(0)
-  let b = chan(1)
-  let m = chan.merge(a, b)
-
-  t.ok(chan.isChan(m))
-  t.ok(m.toString() == '[<-]chan.merge(chan(0), chan(1))')
-
-  let timeline = ''
-  consume(m, v => timeline += str(v))
-
-  t.ok(m.canSend == false)
-  t.ok(m.canSendSync == false)
-
-  t.throws(() => m.send('x'), /take-only/)
-  t.throws(() => m.sendSync('x'), /take-only/)
-  t.throws(() => m.close(), /take-only/)
-  t.throws(() => m.closeSync(), /take-only/)
-
-  await a.send('x')
-  b.sendSync('y')
-
-  await t.nextTick()
-
-  t.ok(timeline == 'xy')
 })

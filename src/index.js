@@ -6,7 +6,7 @@ import {EventEmitterMixin} from './event-emitter'
 import {Thenable} from './thenable'
 import {select, selectSync} from './select'
 import {ChanWritableStreamMixin} from './writable-stream'
-import {mergeTo} from './merge'
+import {MergeChan} from './merge'
 import {fromIterator, thenableRunner} from './iterator'
 import {ISCHAN, CLOSED, OP_TAKE, OP_SEND, ERROR} from './constants'
 import {mixin, describeArray, describeValue, defaultTo, extend, nop} from './utils'
@@ -91,8 +91,7 @@ chan.fromPromise = function fromPromise(promise) {
 
 
 const MERGE_DEFAULTS = {
-  output: undefined,
-  closeOutput: true,
+  closeOnFinish: true,
   bufferSize: 0
 }
 
@@ -104,16 +103,10 @@ chan.merge = function merge(/* ...chans */) {
   } else {
     opts = MERGE_DEFAULTS
   }
-  let desc = opts.output ? undefined : {
-    constructorName: 'chan.merge',
-    constructorArgs: chans
-  }
-  let output = mergeTo(
-    createChanIfUndefined(opts.output, opts.bufferSize, MERGE_DEFAULTS.bufferSize, desc),
-    chans,
-    opts.closeOutput === undefined ? MERGE_DEFAULTS.closeOutput : !!opts.closeOutput
+  return new MergeChan(chans,
+    defaultTo(MERGE_DEFAULTS.bufferSize, opts.bufferSize),
+    defaultTo(MERGE_DEFAULTS.closeOnFinish, opts.closeOnFinish)
   )
-  return opts.output || output.takeOnly.withDesc(desc)
 }
 
 chan.merge.setDefaults = function merge$setDefaults(opts) {
