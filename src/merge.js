@@ -90,11 +90,11 @@ export class MergeChan extends Chan {
     if (!this._totalDataSrcs && !this._totalTimeoutSrcs) {
       // no srcs left alive => end merging
       this._end()
-    } else if (canTakeMore) {
+    } else if (canTakeMore && this.canTakeSync) {
       // dst can't accept more data synchronously => wait until it can, then resume
       this._maybeCanSendSync(this._onMaybeCanSendSync_bnd, false)
     } else {
-      // dst can accept more data, but srcs can't provide it => wait until they can
+      // srcs can't provide more data => wait until they can
       this._totalTimeoutSrcs && this._subscribeForSrcs(this._timeoutSrcs)
       this._totalDataSrcs && this._subscribeForSrcs(this._dataSrcs)
     }

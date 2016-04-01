@@ -500,7 +500,7 @@ test(`performs as much ops as possible synchronously (multiple chans, case 2)`, 
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-test(`propagates #maybeCanTakeSync() to sources (case 1)`, async t => {
+test.skip(`propagates #maybeCanTakeSync() to sources (case 1)`, async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
   let a = chan()
   let b = chan()
@@ -547,21 +547,49 @@ test(`propagates #maybeCanTakeSync() to sources (case 2)`, async t => {
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-test(`#maybeCanTakeSync() works normally`, async t => {
+test(`#maybeCanTakeSync() works normally (case 1)`, async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+  let a = chan()
+  let m = chan.merge(a)
+
+  let maybeCanTakeSync = NOT_YET
+  m.maybeCanTakeSync().then(v => maybeCanTakeSync = v).catch(t.fail)
+
+  await t.nextTurn()
+  t.ok(maybeCanTakeSync === NOT_YET)
+})
+
+test.skip(`#maybeCanTakeSync() works normally (case 2)`, async t => {
   let a = chan()
   let b = chan()
 
-  a.maybeCanSendSync().then(t.fail.with(`a.maybeCanSendSync()`)).catch(t.fail)
-  b.maybeCanSendSync().then(t.fail.with(`b.maybeCanSendSync()`)).catch(t.fail)
+  let maybeCanSendSyncA = NOT_YET
+  let maybeCanSendSyncB = NOT_YET
+
+  a.maybeCanSendSync().then(v => maybeCanSendSyncA = v).catch(t.fail)
+  b.maybeCanSendSync().then(v => maybeCanSendSyncB = v).catch(t.fail)
 
   let m = chan.merge(a, b)
+
+  await t.nextTurn()
+  t.ok(maybeCanSendSyncA === NOT_YET && maybeCanSendSyncB === NOT_YET)
+
   m.sendNow('x')
+
+  await t.nextTurn()
+  t.ok(maybeCanSendSyncA === NOT_YET && maybeCanSendSyncB === NOT_YET)
+
   t.is(true, await m.maybeCanTakeSync())
+
+  await t.nextTurn()
+  t.ok(maybeCanSendSyncA === NOT_YET && maybeCanSendSyncB === NOT_YET)
 
   m.close()
   t.ok(m.takeSync() && m.value == 'x')
   t.ok(m.isClosed)
+
+  await t.nextTurn()
+  t.ok(maybeCanSendSyncA === NOT_YET && maybeCanSendSyncB === NOT_YET)
 
   t.is(false, await m.maybeCanTakeSync())
 })
@@ -684,4 +712,151 @@ test(`when any of the chans are expired timeout chans, yields error`, async t =>
 
   let m6 = chan.merge(chBuf, ch, tm)
   await t.throws(m6.take(), /out of vodka/)
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`can be composed (case 1)`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let a = chan().named('a')
+  let b = chan.merge(a).named('b')
+  let c = chan.merge(b).named('c')
+  let d = chan.merge(c).named('d')
+
+  let recv = NOT_YET
+  d.take().then(v => recv = v).catch(t.fail)
+
+  await t.nextTurn()
+  t.ok(recv === NOT_YET)
+
+  let sent = NOT_YET
+  a.sendNow('x')
+
+  await t.nextTick()
+  t.ok(recv == 'x')
+
+  let maybeCanSend = NOT_YET
+  a.maybeCanSendSync().then(v => maybeCanSend = v).catch(t.fail)
+
+  await t.nextTurn()
+
+  // this is not highly desired, as, in reality, we cannot send sync to a,
+  // but that's just a consequence of how merge works
+  t.ok(maybeCanSend === true)
+
+  t.ok(a.closeSync() == true)
+
+  t.ok(b.isClosed == true)
+  t.ok(c.isClosed == true)
+  t.ok(d.isClosed == true)
+})
+
+test(`can be composed (case 2)`, async t => {
+  let a = chan.timeout(100).named('a')
+  let b = chan.merge(a).named('b')
+  let c = chan.merge(b).named('c')
+
+  let recv = NOT_YET
+  c.take().then(value => recv = {value}).catch(error => recv = {error})
+
+  await t.nextTurn()
+  t.ok(recv === NOT_YET)
+
+  await t.sleep(50)
+  t.ok(recv === NOT_YET)
+
+  await t.sleep(50)
+  t.ok(recv && recv.error && /timeout/.test(recv.error.message))
+
+  await t.throws(c.take(), /timeout/)
+  await t.throws(c.take(), /timeout/)
+  await t.throws(c.take(), /timeout/)
+
+  t.ok(b.closeSync() == true)
+  t.ok(c.isClosed == true)
+})
+
+test(`can be composed (case 3)`, async t => {
+  let a = chan(2)
+  let b = chan(2)
+  let T = chan.timeout(1000)
+  let m1 = chan.merge(a, b, T)
+
+  let c = chan(2)
+  let m2 = chan.merge(m1, c)
+
+  let d = chan()
+  let m = chan.merge(d, m2)
+
+  a.sendSync('a-0')
+  a.sendSync('a-1')
+
+  b.sendSync('b-0')
+  b.sendSync('b-1')
+
+  c.sendSync('c-0')
+  c.sendSync('c-1')
+
+  d.sendNow('d-0')
+  d.sendNow('d-1')
+
+  await t.nextTurn()
+
+  t.ok(a.takeSync() && a.value == 'a-0')
+  t.ok(b.takeSync() && b.value == 'b-0')
+  t.ok(c.takeSync() && c.value == 'c-0')
+  t.ok(d.takeSync() && d.value == 'd-0')
+
+  let values = []
+
+  t.ok(m.takeSync() == true); values.push(m.value)
+  t.ok(m.takeSync() == true); values.push(m.value)
+  t.ok(m.takeSync() == true); values.push(m.value)
+  t.ok(m.takeSync() == true); values.push(m.value)
+
+  for (let v of [ 'a-1', 'b-1', 'c-1', 'd-1' ]) {
+    t.ok(values.indexOf(v) >= 0)
+  }
+
+  b.sendSync('b-2')
+  t.ok(m.takeSync() && m.value == 'b-2')
+
+  d.sendNow('d-2')
+  t.ok(m.takeSync() && m.value == 'd-2')
+
+  c.sendNow('c-2')
+  t.ok(m.takeSync() && m.value == 'c-2')
+
+  let recv = NOT_YET
+  m.take().then(v => recv = v).catch(t.fail)
+
+  await t.nextTurn()
+  t.ok(recv === NOT_YET)
+
+  await a.send('a-2')
+  t.ok(recv === 'a-2')
+
+  recv = NOT_YET
+  m.take().then(v => recv = v).catch(t.fail)
+
+  await c.send('c-3')
+  t.ok(recv === 'c-3')
+
+  await a.close()
+  t.ok(m.isClosed == false)
+
+  await b.close()
+  t.ok(m.isClosed == false)
+
+  await c.close()
+  t.ok(m.isClosed == false)
+
+  await d.close()
+  t.ok(m.isClosed == false)
+
+  await t.sleep(1000)
+  t.ok(m.isClosed == false)
+
+  await t.throws(m.take(), /timeout/)
+  await t.throws(m.take(), /timeout/)
+  await t.throws(m.take(), /timeout/)
 })
