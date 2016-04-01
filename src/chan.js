@@ -173,7 +173,7 @@ export class Chan {
       if (item !== FAILED) {
         assert(item.type == SEND_TYPE_VALUE || item.type == SEND_TYPE_ERROR)
         let fn = item.type == SEND_TYPE_VALUE ? fnVal : fnErr
-        item.fnVal && item.fnVal(item.value) // this may change item.type to TYPE_CANCELLED
+        item.fnVal && item.fnVal(item.value)
         fn && fn(item.value)
         if (this._state == STATE_NORMAL && this._buffer.length < this._bufferSize) {
           let waiters = this._waiters.length ? this._waiters.splice(0) : undefined
