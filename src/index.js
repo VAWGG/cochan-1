@@ -9,7 +9,7 @@ import {ChanWritableStreamMixin} from './writable-stream'
 import {MergeChan} from './merge'
 import {fromIterator, thenableRunner} from './iterator'
 import {ISCHAN, CLOSED, OP_TAKE, OP_SEND, ERROR} from './constants'
-import {SEND_TYPE_VALUE, SEND_TYPE_ERROR, SEND_TYPE_INTENT} from './constants'
+import {SEND_TYPE_VALUE, SEND_TYPE_ERROR} from './constants'
 import {mixin, describeArray, describeValue, defaultTo, extend, nop} from './utils'
 import {isIterator, isGenerator, isGeneratorFunction} from './utils'
 import schedule from './schedule'
@@ -462,10 +462,3 @@ mixin(TakeOnlyChanProxy, EventEmitterMixin)
 
 mixin(SendOnlyChanProxy, ChanBaseMixin.prototype)
 mixin(SendOnlyChanProxy, EventEmitterMixin)
-
-
-// internal api
-
-chan.SEND_TYPE_VALUE = SEND_TYPE_VALUE
-chan.SEND_TYPE_ERROR = SEND_TYPE_ERROR
-chan.SEND_TYPE_INTENT = SEND_TYPE_INTENT
