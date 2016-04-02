@@ -15,7 +15,8 @@ const TYPE_VALUE = 0
 const TYPE_ERROR = 1
 const TYPE_CANCELLED = 2
 
-
+// TODO: test "finish" event emitting.
+//
 export class Chan {
 
   constructor(bufferSize) {
@@ -289,7 +290,7 @@ export class Chan {
     }
     if (this._buffer.length == 0) {
       // there are no real publishers, only (maybe) waiters for opportunity to publish => kill 'em
-      this._close(STATE_NORMAL)
+      this._close()
       return true
     }
     return false
@@ -343,16 +344,14 @@ export class Chan {
     } else {
       this._terminateAllOutstandingSends()
     }
-    this._close(fromState)
+    this._close()
   }
 
-  _close(fromState) {
+  _close() {
     assert(this._buffer.length == 0)
     this._state = STATE_CLOSED
     this._triggerWaiters(false)
-    if (fromState == STATE_CLOSING) {
-      this.emit('finish')
-    }
+    this.emit('finish')
     this.emit('closed')
   }
 
@@ -376,7 +375,7 @@ export class Chan {
     }
 
     if (len == 0 && this._state == STATE_CLOSING) {
-      this._close(STATE_CLOSING)
+      this._close()
     } else {
       let bufferSize = this._bufferSize
       if (bufferSize && len >= bufferSize) {
@@ -407,7 +406,7 @@ export class Chan {
     buf.splice(index)
     let len = buf.length
     if (this._state == STATE_CLOSING && buf.length == 0) {
-      this._close(STATE_CLOSING)
+      this._close()
     }
   }
 
