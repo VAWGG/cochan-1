@@ -1,6 +1,9 @@
 import {ISCHAN, P_RESOLVED_WITH_FALSE, P_RESOLVED_WITH_TRUE} from './constants'
 import schedule from './schedule'
 
+//
+// TODO: test piping Streams3 stream into a send-only chan
+//
 
 export class TakeOnlyChanProxy {
 
@@ -114,6 +117,12 @@ export class TakeOnlyChanProxy {
 
   close() {
     this._throwCannotClose()
+  }
+
+  // event emitter
+
+  emit(/* event, ...args */) {
+    throw new Error(`manually emitting events from a take-only chan ${this} is not supported`)
   }
 
   // writable stream
@@ -256,6 +265,12 @@ export class SendOnlyChanProxy {
 
   _take(fnVal, fnErr, needsCancelFn) {
     this._throwCannotTake()
+  }
+
+  // event emitter
+
+  emit(/* event, ...args */) {
+    this._chan.emit.apply(this._chan, arguments)
   }
 
   // writable stream
