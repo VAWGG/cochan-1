@@ -12,11 +12,14 @@ const STATE_WAITING_FOR_PUBLISHER = 1
 const STATE_CLOSING = 2
 const STATE_CLOSED = 3
 
+const STATE_NAMES = [
+  'STATE_NORMAL', 'STATE_WAITING_FOR_PUBLISHER', 'STATE_CLOSING', 'STATE_CLOSED'
+]
+
 
 export class Chan {
 
   constructor(bufferSize) {
-    this._initWritableStream()
     this._state = STATE_NORMAL
     this._bufferSize = bufferSize
     this._buffer = []
@@ -178,7 +181,7 @@ export class Chan {
         if (this._state == STATE_NORMAL && this._buffer.length < this._bufferSize) {
           let waiters = this._waiters.length ? this._waiters.splice(0) : undefined
           this._needsDrain && this._emitDrain()
-          waiters && triggerWaiters(waiters, this._state < STATE_CLOSING)
+          if (waiters) triggerWaiters(waiters, this._state < STATE_CLOSING)
         }
         return nop
       }
@@ -189,11 +192,19 @@ export class Chan {
     let item = { fnVal, fnErr }
     this._buffer.push(item)
 
-    if (prevState == STATE_NORMAL) {
+    let waiters
+
+    if (prevState == STATE_NORMAL && this._waiters.length) {
+      waiters = this._waiters.splice(0)
+    }
+
+    if (this._needsDrain) {
+      this._emitDrain()
+    }
+
+    if (waiters) {
       // notify all waiters for the opportunity to publish
-      let waiters = this._waiters.length ? this._waiters.splice(0) : undefined
-      this._needsDrain && this._emitDrain() // TODO: probably not needed here
-      waiters && triggerWaiters(waiters, this._state < STATE_CLOSING)
+      triggerWaiters(waiters, this._state < STATE_CLOSING)
     }
 
     return needsCancelFn ? () => { item.fnVal = item.fnErr = undefined } : nop
@@ -496,8 +507,7 @@ export class Chan {
   }
 
   get _stateName() {
-    let names = ['STATE_NORMAL', 'STATE_WAITING_FOR_PUBLISHER', 'STATE_CLOSING', 'STATE_CLOSED']
-    return names[ this._state ]
+    return STATE_NAMES[ this._state ]
   }
 }
 

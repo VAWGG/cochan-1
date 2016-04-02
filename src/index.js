@@ -377,6 +377,16 @@ class ChanBaseMixin {
     return this.toString()
   }
 
+  setNeedsDrain() {
+    this._needsDrain = true
+  }
+
+  _emitDrain() {
+    assert(this._needsDrain)
+    this._needsDrain = false
+    this.emit('drain')
+  }
+
   _makePromise() {
     let promise = this._promise
     if (!promise) {
@@ -414,8 +424,12 @@ class ChanBaseMixin {
 
 
 ChanBaseMixin.prototype.CLOSED = CLOSED
+
+ChanBaseMixin.prototype._needsDrain = false
+
 ChanBaseMixin.prototype._takeOnly = undefined
 ChanBaseMixin.prototype._sendOnly = undefined
+
 ChanBaseMixin.prototype._promise = undefined
 ChanBaseMixin.prototype._resolve = undefined
 ChanBaseMixin.prototype._reject = undefined

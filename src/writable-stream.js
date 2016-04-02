@@ -4,10 +4,6 @@ import {P_RESOLVED, SEND_TYPE_VALUE} from './constants'
 
 class WritableStreamMixin {
 
-  _initWritableStream() {
-    this._needsDrain = false
-  }
-
   write(chunk, encoding, cb) {
     if (!this.isActive) {
       let err = new Error('attempt to write into a closed channel')
@@ -54,12 +50,6 @@ class WritableStreamMixin {
     } else {
       this.close()
     }
-  }
-
-  _emitDrain() {
-    assert(this._needsDrain)
-    this._needsDrain = false
-    this.emit('drain')
   }
 
   // these are noops:
