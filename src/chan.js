@@ -207,7 +207,7 @@ export class Chan {
       triggerWaiters(waiters, this._state < STATE_CLOSING)
     }
 
-    return needsCancelFn ? () => { item.fnVal = item.fnErr = undefined } : nop
+    return needsCancelFn ? () => this._cancelTake(item) : nop
   }
 
   _maybeCanTakeSync(fn, mayReturnPromise) {
@@ -424,6 +424,11 @@ export class Chan {
     if (this._state == STATE_CLOSING && buf.length == 0) {
       this._close(STATE_CLOSING)
     }
+  }
+
+  _cancelTake(item) {
+    item.fnVal = undefined
+    item.fnErr = undefined
   }
 
   _sendToWaitingConsumer(value, type) {
