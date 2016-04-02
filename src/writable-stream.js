@@ -2,6 +2,11 @@ import assert from 'power-assert'
 import schedule from './schedule'
 import {P_RESOLVED, SEND_TYPE_VALUE} from './constants'
 
+// TODO: test unpiping, see:
+//
+// https://nodejs.org/api/stream.html#stream_event_unpipe
+// https://github.com/nodejs/node/blob/master/lib/_stream_readable.js#L615
+//
 class WritableStreamMixin {
 
   write(chunk, encoding, cb) {
