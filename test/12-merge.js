@@ -961,6 +961,42 @@ test(`can be closed, which stops merging right now (case 4)`, async t => {
   t.ok(recv === chan.CLOSED)
 })
 
+test(`can be closed, which stops merging right now (case 5)`, async t => {
+  let a = chan(2)
+
+  t.ok(a.sendSync('x'))
+  t.ok(a.sendSync('y'))
+
+  let m = chan.merge(a, { bufferSize: 1 })
+  t.ok(m.isClosed == false && m.isActive == true)
+
+  m.close()
+  t.ok(m.isClosed == false && m.isActive == false && m.canTakeSync == true)
+
+  t.ok(m.takeSync() && m.value == 'x')
+  t.ok(m.isClosed == true && m.isActive == false && m.canTakeSync == false && m.takeSync() == false)
+
+  t.ok(a.takeSync() && a.value == 'y')
+})
+
+test(`can be closed, which stops merging right now (case 6)`, async t => {
+  let a = chan(2)
+
+  t.ok(a.sendSync('x'))
+  t.ok(a.sendSync('y'))
+
+  let m = chan.merge(a, { bufferSize: 1 })
+  t.ok(m.isClosed == false && m.isActive == true)
+
+  m.close()
+  t.ok(m.isClosed == false && m.isActive == false && m.canTakeSync == true)
+
+  t.is('x', await m.take())
+  t.ok(m.isClosed == true && m.isActive == false && m.canTakeSync == false && m.takeSync() == false)
+
+  t.ok(a.takeSync() && a.value == 'y')
+})
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 test(`can be composed (case 1)`, async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
