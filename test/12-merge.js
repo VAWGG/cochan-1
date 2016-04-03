@@ -175,25 +175,33 @@ test(`given one chan, yields the same values as the chan itself would (buffered 
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-test(`given no chans, or only closed chans, closes dst chan right away`, async t => {
+test(`given no chans, or only closed and timeout chans, closes dst chan right away`, async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
   let m = chan.merge()
-  t.ok(m.isClosed == true)
+  t.ok(m.isClosed == true && m.isActive == false && m.canTakeSync == false && m.takeSync() == false)
 
   let a = chan()
   a.closeSync()
   m = chan.merge(a)
-  t.ok(m.isClosed == true)
+  t.ok(m.isClosed == true && m.isActive == false && m.canTakeSync == false && m.takeSync() == false)
 
   let b = chan()
   b.closeSync()
   m = chan.merge(a, b)
-  t.ok(m.isClosed == true)
+  t.ok(m.isClosed == true && m.isActive == false && m.canTakeSync == false && m.takeSync() == false)
+
+  let T = chan.timeout(0)
+  await t.sleep(1)
+  m = chan.merge(T)
+  t.ok(m.isClosed == true && m.isActive == false && m.canTakeSync == false && m.takeSync() == false)
+
+  m = chan.merge(T, { bufferSize: 1 })
+  t.ok(m.isClosed == true && m.isActive == false && m.canTakeSync == false && m.takeSync() == false)
 
   let c = chan()
   c.closeSync()
-  m = chan.merge(a, b, c)
-  t.ok(m.isClosed == true)
+  m = chan.merge(a, b, c, T)
+  t.ok(m.isClosed == true && m.isActive == false && m.canTakeSync == false && m.takeSync() == false)
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -204,12 +212,12 @@ async t => {
   let m = chan.merge(a)
 
   await t.sleep(100)
-  t.ok(m.isClosed == false)
+  t.ok(m.isClosed == false && m.isActive == true)
 
   a.closeSync()
   await t.nextTick()
 
-  t.ok(m.isClosed == true)
+  t.ok(m.isClosed == true && m.isActive == false && m.canTakeSync == false && m.takeSync() == false)
 })
 
 test(`when all chans close before yielding any values, closes the output chan (case 2)`,
@@ -232,7 +240,7 @@ async t => {
   t.ok(m.isClosed == false)
 
   await c.close()
-  t.ok(m.isClosed == true)
+  t.ok(m.isClosed == true && m.isActive == false && m.canTakeSync == false && m.takeSync() == false)
   t.is(chan.CLOSED, await m.take())
 })
 
@@ -270,7 +278,7 @@ test(`doesn't consume anything until output can receive data (case 2)`, async t 
   t.is('c', await m.take())
   t.ok(src.canTakeSync && src.takeSync() && src.value == 'd')
 
-  t.ok(src.isClosed == true)
+  t.ok(m.isClosed == true && m.isActive == false && m.canTakeSync == false && m.takeSync() == false)
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -857,9 +865,6 @@ test(`when any of the chans are expired timeout chans, yields error`, async t =>
 
   await t.sleep(10)
 
-  let m1 = chan.merge(tm)
-  await t.throws(m1.take(), /out of vodka/)
-
   let m2 = chan.merge(tm, ch)
   await t.throws(m2.take(), /out of vodka/)
 
@@ -1002,7 +1007,7 @@ test(`can be composed (case 1)`, async t => {
 
 test(`can be composed (case 2)`, async t => {
   let a = chan.timeout(100).named('a')
-  let b = chan.merge(a).named('b')
+  let b = chan.merge(a, chan()).named('b')
   let c = chan.merge(b).named('c')
 
   let recv = NOT_YET
@@ -1150,14 +1155,7 @@ test(`can be composed (case 4)`, async t => {
   t.ok(m.isClosed == false)
 
   await d.close()
-  t.ok(m.isClosed == false)
-
-  await t.sleep(1000)
-  t.ok(m.isClosed == false)
-
-  await t.throws(m.take(), /timeout/)
-  await t.throws(m.take(), /timeout/)
-  await t.throws(m.take(), /timeout/)
+  t.ok(m.isClosed == true)
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

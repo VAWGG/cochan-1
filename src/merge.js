@@ -35,7 +35,11 @@ export class MergeChan extends Chan {
     this._mergeState = STATE_AWAITING_SEND
     this._syncSrcs = arrayPool.take()
     this._init(srcs)
-    this._maybeSendNext()
+    if (this._totalDataSrcs) {
+      this._maybeSendNext()
+    } else {
+      this._end()
+    }
   }
 
   _init(srcs) {
@@ -103,7 +107,7 @@ export class MergeChan extends Chan {
       }
     }
     assert(canSendSync || canTakeMore)
-    if (!this._totalDataSrcs && !this._totalTimeoutSrcs) {
+    if (!this._totalDataSrcs) {
       // no srcs left alive => end merging
       this._end()
     } else if (!canSendSync) {
@@ -255,7 +259,7 @@ export class MergeChan extends Chan {
     let index = this._dataSrcs.indexOf(src)
     assert(index >= 0)
     this._dataSrcs.splice(index, 1)
-    if (!--this._totalDataSrcs && !this._totalTimeoutSrcs && this._mergeState != STATE_MERGING_SYNC) {
+    if (!--this._totalDataSrcs && this._mergeState != STATE_MERGING_SYNC) {
       this._end()
     }
   }
