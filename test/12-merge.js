@@ -1157,3 +1157,107 @@ test(`can be composed (case 4)`, async t => {
   await t.throws(m.take(), /timeout/)
   await t.throws(m.take(), /timeout/)
 })
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`(internal) the single take from a merge chan can be cancelled`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let a = chan(1)
+  let m = chan.merge(a)
+
+  let taken = NOT_YET
+  let cancel = m._take(v => taken = {v}, e => taken = {e}, true)
+
+  await t.nextTurn()
+  t.ok(taken === NOT_YET)
+
+  cancel()
+  t.ok(a.sendSync('x'))
+
+  await t.nextTurn()
+  t.ok(taken === NOT_YET)
+  t.ok(a.takeSync() && a.value == 'x')
+})
+
+test(`(internal) multiple takes from a merge chan can be cancelled`, async t => {
+  let a = chan(1)
+  let m = chan.merge(a)
+
+  let taken_1 = NOT_YET
+  let taken_2 = NOT_YET
+
+  let cancel_1 = m._take(v => taken_1 = {v}, e => taken_1 = {e}, true)
+  let cancel_2 = m._take(v => taken_2 = {v}, e => taken_2 = {e}, true)
+
+  await t.nextTurn()
+  t.ok(taken_1 === NOT_YET && taken_2 === NOT_YET)
+
+  cancel_1()
+  cancel_2()
+
+  t.ok(a.sendSync('x'))
+
+  await t.nextTurn()
+  t.ok(taken_1 === NOT_YET && taken_2 === NOT_YET)
+  t.ok(a.takeSync() && a.value == 'x')
+})
+
+test(`(internal) cancelling some take doesn't affect other ones (case 1)`, async t => {
+  let a = chan(1)
+  let m = chan.merge(a)
+
+  let taken_1 = NOT_YET
+  let taken_2 = NOT_YET
+
+  let cancel_1 = m._take(v => taken_1 = {v}, e => taken_1 = {e}, true)
+  let cancel_2 = m._take(v => taken_2 = {v}, e => taken_2 = {e}, true)
+
+  await t.nextTurn()
+  t.ok(taken_1 === NOT_YET && taken_2 === NOT_YET)
+
+  cancel_1()
+
+  t.ok(a.sendSync('x'))
+  t.ok(taken_1 === NOT_YET && taken_2.v == 'x')
+  t.ok(a.takeSync() == false)
+})
+
+test(`(internal) cancelling some take doesn't affect other ones (case 2)`, async t => {
+  let a = chan(1)
+  let m = chan.merge(a)
+
+  let taken_1 = NOT_YET
+  let taken_2 = NOT_YET
+
+  let cancel_1 = m._take(v => taken_1 = {v}, e => taken_1 = {e}, true)
+  let cancel_2 = m._take(v => taken_2 = {v}, e => taken_2 = {e}, true)
+
+  await t.nextTurn()
+  t.ok(taken_1 === NOT_YET && taken_2 === NOT_YET)
+
+  cancel_2()
+
+  t.ok(a.sendSync('x'))
+  t.ok(taken_1.v == 'x' && taken_2 === NOT_YET)
+  t.ok(a.takeSync() == false)
+})
+
+test(`(internal) cancelling the same take multiple times makes no harm`, async t => {
+  let a = chan(1)
+  let m = chan.merge(a)
+
+  let taken = NOT_YET
+  let cancel = m._take(v => taken = {v}, e => taken = {e}, true)
+
+  await t.nextTurn()
+  t.ok(taken === NOT_YET)
+
+  cancel()
+  cancel()
+  cancel()
+
+  t.ok(a.sendSync('x'))
+
+  await t.nextTurn()
+  t.ok(taken === NOT_YET)
+  t.ok(a.takeSync() && a.value == 'x')
+})
