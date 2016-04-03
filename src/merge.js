@@ -288,12 +288,35 @@ export class MergeChan extends Chan {
     return this._srcs
   }
 
+  _maybeCanTakeSync(fn, mayReturnPromise) {
+    if (this.canTakeSync) {
+      return mayReturnPromise ? P_RESOLVED_WITH_TRUE : (fn(true), undefined)
+    }
+    if (this._mergeState == STATE_ENDED) {
+      return mayReturnPromise ? P_RESOLVED_WITH_FALSE : (fn(false), undefined)
+    }
+    fn = callOnce1(fn)
+    let srcs = this._dataSrcs
+    for (let i = 0; i < srcs.length; ++i) {
+      srcs[i].chan._maybeCanTakeSync(fn, false)
+    }
+    super._maybeCanTakeSync(fn, false)
+  }
+
   get canSend() {
     return false
   }
 
   get canSendSync() {
     return false
+  }
+
+  _maybeCanSendSync(fn, mayReturnPromise) {
+    if (mayReturnPromise) {
+      return this.isActive ? P_RESOLVED_WITH_TRUE : P_RESOLVED_WITH_FALSE
+    } else {
+      fn(this.isActive)
+    }
   }
 
   send(value, type) {
@@ -342,6 +365,15 @@ function onTakenInvalidStateMsg(state, src) {
     ? `one of the source channels, ${src.chan}, called its _take callback synchronously ` +
       `despite the fact that it reported that it cannot be synchronously taken from`
     : `internal inconsistency error`
+}
+
+function callOnce1(fn) {
+  let doCall = true; return arg => {
+    if (doCall) {
+      doCall = false
+      fn(arg)
+    }
+  }
 }
 
 Object.defineProperties(MergeChan.prototype, {

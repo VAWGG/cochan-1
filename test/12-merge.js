@@ -48,6 +48,24 @@ test(`merge channel cannot be sent or piped into`, async t => {
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`#maybeCanSendSync() always resolves as fast as possible`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan.merge( chan() )
+  let resolvedWith
+
+  resolvedWith = NOT_YET
+  ch.maybeCanSendSync().then(v => resolvedWith = v).catch(t.fail)
+  await t.nextTick()
+  t.ok(resolvedWith == true)
+
+  resolvedWith = NOT_YET
+  ch.closeNow()
+  ch.maybeCanSendSync().then(v => resolvedWith = v).catch(t.fail)
+  await t.nextTick()
+  t.ok(resolvedWith == false)
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 test(`merges output of multiple chans into one, and closes the resulting chan only when ` +
   `all sources have closed`, async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -396,6 +414,42 @@ async t => {
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`canTakeSync and takeSync behave properly when the output is buffered`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let a = chan(1)
+  let b = chan(1)
+  let m = chan.merge(a, b, { bufferSize: 1 })
+
+  t.ok(m.canTakeSync == false)
+
+  t.ok(a.sendSync('a-1')) // a-1 is buffered inside m
+  t.ok(m.canTakeSync == true && a.canTakeSync == false)
+
+  t.ok(b.sendSync('b-1')) // b-1 is not buffered inside m yet
+  t.ok(m.canTakeSync == true && b.canTakeSync == true)
+
+  t.ok(m.takeSync() && m.value == 'a-1') // b-1 gets buffered inside m
+  t.ok(m.canTakeSync == true && b.canTakeSync == false)
+
+  t.ok(a.sendSync('a-2')) // a-2 is not buffered inside m yet
+  t.ok(m.canTakeSync == true && a.canTakeSync == true)
+
+  t.ok(b.sendSync('b-2')) // b-2 is not buffered inside m yet
+  t.ok(m.canTakeSync == true && b.canTakeSync == true)
+
+  t.ok(m.takeSync() && m.value == 'b-1')
+  // at this point, either a-2 or b-2 (random choice) gets buffered inside m
+
+  let values = []
+
+  t.ok(m.takeSync() == true); values.push(m.value)
+  t.ok(m.takeSync() == true); values.push(m.value)
+  t.ok(m.canTakeSync == false)
+
+  t.ok(values && values.indexOf('a-2') >= 0 && values.indexOf('b-2') >= 0)
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 test(`performs as much ops as possible synchronously (one input chan)`, async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
   let inp = chan()
@@ -531,66 +585,64 @@ test(`performs as much ops as possible synchronously (multiple chans, case 2)`, 
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-test.skip(`propagates #maybeCanTakeSync() to sources (case 1)`, async t => {
+test(`#maybeCanTakeSync() triggers when one of the merged channels becomes available ` +
+  `for sync take`, async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
   let a = chan()
   let b = chan()
   let m = chan.merge(a, b)
-  
-  let events = ''
 
-  a.maybeCanSendSync().then(alive => events += `S(a, ${alive})`).catch(t.fail)
-  b.maybeCanSendSync().then(alive => events += `S(b, ${alive})`).catch(t.fail)
+  let events, maybeCanTakeSync = () => {
+    events = ''
+    m.maybeCanTakeSync().then(v => events += `M(${v})`).catch(t.fail)
+  }
 
+  maybeCanTakeSync()
   await t.nextTurn()
   t.ok(events == '')
 
-  m.maybeCanTakeSync().then(alive => events += `T(m, ${alive})`).catch(t.fail)
-
+  b.sendNow('x')
   await t.nextTick()
-  t.ok(events == 'S(a, true)S(b, true)T(m, true)')
+  t.ok(events == 'M(true)')
 })
 
-test.skip(`propagates #maybeCanTakeSync() to sources (case 2)`, async t => {
+test(`#maybeCanTakeSync() doesn't trigger when the value gets immediately consumed by ` +
+  `the merge (non-buffered output)`,
+async t => {
   let a = chan()
-  let m = chan.merge(a)
+  let b = chan()
+  let m = chan.merge(a, b)
 
-  let pS = a.maybeCanSendSync().then(alive => {
-    if (!alive) {
-      return t.fail(`a unexpectedly closed`)
-    }
-    a.sendNow('x')
-  })
-  .catch(t.fail)
+  let events = ''
 
-  let pT = m.maybeCanTakeSync().then(alive => {
-    if (!alive) {
-      return t.fail(`m unexpectedly closed`)
-    }
-    if (!m.takeSync()) {
-      return t.fail(`sync take failed`)
-    }
-    t.ok(m.value == 'x')
-  })
-  .catch(t.fail)
+  m.maybeCanTakeSync().then(v => events += `M(${v})`).catch(t.fail)
 
-  await Promise.all([ pS, pT ])
+  m.take().then(v => events += `T(${v})`).catch(t.fail)
+  await t.nextTick()
+
+  t.ok(a.sendSync('x'))
+  await t.nextTick()
+  t.ok(events == 'T(x)')
+
+  await t.sleep(100)
+  t.ok(events == 'T(x)')
 })
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
-test.skip(`#maybeCanTakeSync() works normally (case 1)`, async t => {
-////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`#maybeCanTakeSync() triggers when the value gets buffered inside the merge channel`,
+async t => {
   let a = chan()
-  let m = chan.merge(a)
+  let b = chan()
+  let m = chan.merge(a, b, { bufferSize: 1 })
 
-  let maybeCanTakeSync = NOT_YET
-  m.maybeCanTakeSync().then(v => maybeCanTakeSync = v).catch(t.fail)
+  let events = ''
+  m.maybeCanTakeSync().then(v => events += `M(${v})`).catch(t.fail)
 
-  await t.nextTurn()
-  t.ok(maybeCanTakeSync === NOT_YET)
+  t.ok(a.sendSync('x'))
+  await t.nextTick()
+  t.ok(events == 'M(true)')
 })
 
-test.skip(`#maybeCanTakeSync() works normally (case 2)`, async t => {
+test(`#maybeCanTakeSync() propagates to the upstream channels`, async t => {
   let a = chan()
   let b = chan()
 
@@ -605,24 +657,101 @@ test.skip(`#maybeCanTakeSync() works normally (case 2)`, async t => {
   await t.nextTurn()
   t.ok(maybeCanSendSyncA === NOT_YET && maybeCanSendSyncB === NOT_YET)
 
-  m.sendNow('x')
+  let maybeCanTakeSync = NOT_YET
+  m.maybeCanTakeSync().then(v => maybeCanTakeSync = v).catch(t.fail)
+
+  await t.nextTick()
+  t.ok(maybeCanSendSyncA == true && maybeCanSendSyncB == true)
+  t.ok(maybeCanTakeSync === NOT_YET)
+
+  await t.sleep(100)
+  t.ok(maybeCanTakeSync === NOT_YET)
+})
+
+test(`#maybeCanTakeSync() triggers as fast as possible when the merge chan is available ` +
+  `for sync take at the time of the call (non-buffered output)`,
+async t => {
+  let ch = chan(1)
+  ch.sendNow('x')
+
+  let m = chan.merge(ch)
+
+  let maybeCanTakeSync = NOT_YET
+  m.maybeCanTakeSync().then(v => maybeCanTakeSync = v).catch(t.fail)
+
+  await t.nextTick()
+  t.ok(maybeCanTakeSync == true)
+})
+
+test(`#maybeCanTakeSync() triggers as fast as possible when the merge chan is available ` +
+  `for sync take at the time of the call (buffered output)`,
+async t => {
+  let ch = chan(1)
+  ch.sendNow('x')
+
+  let m = chan.merge(ch, { bufferSize: 1 })
+
+  let maybeCanTakeSync = NOT_YET
+  m.maybeCanTakeSync().then(v => maybeCanTakeSync = v).catch(t.fail)
+
+  await t.nextTick()
+  t.ok(maybeCanTakeSync == true)
+})
+
+test(`#maybeCanTakeSync() triggers false response when the merge chan gets closed`,
+async t => {
+  let m = chan.merge( chan() )
+
+  let maybeCanTakeSync = NOT_YET
+  m.maybeCanTakeSync().then(v => maybeCanTakeSync = v).catch(t.fail)
 
   await t.nextTurn()
-  t.ok(maybeCanSendSyncA === NOT_YET && maybeCanSendSyncB === NOT_YET)
+  t.ok(maybeCanTakeSync === NOT_YET)
 
-  t.is(true, await m.maybeCanTakeSync())
+  m.closeNow()
+  await t.nextTick()
+  t.ok(maybeCanTakeSync == false)
+})
 
-  await t.nextTurn()
-  t.ok(maybeCanSendSyncA === NOT_YET && maybeCanSendSyncB === NOT_YET)
+test(`#maybeCanTakeSync() triggers false response as fast as possible when the merge chan ` +
+  `is closed at the time of the call`,
+async t => {
+  let m = chan.merge( chan() )
+  m.closeNow()
 
-  m.close()
-  t.ok(m.takeSync() && m.value == 'x')
-  t.ok(m.isClosed)
+  let maybeCanTakeSync = NOT_YET
+  m.maybeCanTakeSync().then(v => maybeCanTakeSync = v).catch(t.fail)
 
-  await t.nextTurn()
-  t.ok(maybeCanSendSyncA === NOT_YET && maybeCanSendSyncB === NOT_YET)
+  await t.nextTick()
+  t.ok(maybeCanTakeSync == false)
+})
 
-  t.is(false, await m.maybeCanTakeSync())
+test(`(internal) #_maybeCanTakeSync() callback gets called synchronously, and no more than once`,
+async t => {
+  let a = chan(1)
+  let b = chan(1)
+  let m = chan.merge(a, b, { bufferSize: 1 })
+
+  let events = ''
+  m._maybeCanTakeSync(v => events += `M(${v})`, false)
+
+  await t.sleep(100)
+  t.ok(events == '')
+
+  t.ok(a.sendSync('a-1'))
+  t.ok(events == 'M(true)')
+
+  t.ok(a.sendSync('a-2'))
+  t.ok(events == 'M(true)')
+
+  t.ok(b.sendSync('b-1'))
+  t.ok(events == 'M(true)')
+
+  b.sendNow('b-2')
+  t.ok(events == 'M(true)')
+
+  await t.sleep(100)
+  t.ok(events == 'M(true)')
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -765,21 +894,24 @@ test(`can be composed (case 1)`, async t => {
   await t.nextTick()
   t.ok(recv == 'x')
 
-  let maybeCanSend = NOT_YET
-  a.maybeCanSendSync().then(v => maybeCanSend = v).catch(t.fail)
+  let maybeCanSendToA = NOT_YET
+  a.maybeCanSendSync().then(v => maybeCanSendToA = v).catch(t.fail)
 
   await t.nextTurn()
-  t.ok(maybeCanSend === NOT_YET)
+  t.ok(maybeCanSendToA === NOT_YET)
 
-  // TODO:
-  //
-  // let maybeCanTake = NOT_YET
-  // d.maybeCanTakeSync().then(v => maybeCanTake = v).catch(t.fail)
-  //
-  // await t.nextTurn()
-  // t.ok(maybeCanTake == true)
+  let maybeCanTakeFromD = NOT_YET
+  d.maybeCanTakeSync().then(v => maybeCanTakeFromD = v).catch(t.fail)
+  
+  await t.nextTurn()
+  t.ok(maybeCanSendToA == true)
+  t.ok(maybeCanTakeFromD === NOT_YET)
 
-  t.ok(a.closeSync() == true)
+  a.sendNow('y')
+  await t.nextTurn()
+  t.ok(maybeCanTakeFromD == true)
+
+  a.closeNow()
 
   t.ok(b.isClosed == true)
   t.ok(c.isClosed == true)
