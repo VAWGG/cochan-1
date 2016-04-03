@@ -16,6 +16,7 @@ const TYPE_ERROR = 1
 const TYPE_CANCELLED = 2
 
 // TODO: test "finish" event emitting.
+// TODO: waiters wait no more than a predefined amount of time.
 //
 export class Chan {
 
