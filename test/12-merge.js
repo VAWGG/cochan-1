@@ -42,6 +42,8 @@ test(`merge channel cannot be sent or piped into`, async t => {
   let s = new stream.PassThrough()
   t.throws(() => s.pipe(m), /not supported/)
 
+  t.throws(() => m.sendOnly, /not supported/)
+
   // internal api
   t.throws(() => m._sendSync('x', 0), /not supported/)
   t.throws(() => m._send('x', 0, t.nop, t.nop, false), /not supported/)

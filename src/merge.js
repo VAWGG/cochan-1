@@ -8,8 +8,9 @@ import {P_RESOLVED_WITH_TRUE, P_RESOLVED_WITH_FALSE} from './constants'
 import {EventEmitterMixin} from './event-emitter'
 
 
-const CANNOT_SEND_ERROR_MSG = `Sending and piping into a merge channel is not supported. ` +
-  `As a workaround, you can add one more channel into the merged set, and send/pipe into it.`
+const CANNOT_SEND_ERROR_MSG = `Sending and piping into a merge channel, as well as coverting it ` +
+  `into a send-only chan, is not supported. As a workaround, you can add one more channel into ` +
+  `the merged set, and send/pipe into it.`
 
 const EMPTY = []
 
@@ -348,6 +349,10 @@ export class MergeChan extends Chan {
       this._throwSendingNotSupported()
     }
     this._super$emit.apply(this, arguments)
+  }
+
+  get sendOnly() {
+    this._throwSendingNotSupported()
   }
 
   _throwSendingNotSupported() {
