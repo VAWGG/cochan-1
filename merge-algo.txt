@@ -1,0 +1,31 @@
+# Merge chan:
+
+- cannot be piped into => we can set needsDrain flag as we like
+- cannot be sent into => we can be sure that drain event guarantees ability to send
+- can be manually closed
+
+
+### init:
+  skip all closed chans
+  add close listeners
+  subscribe self.drain ~> turn()
+
+
+### turn:
+  while can send and can take:
+    take timeout, or random chan if no expired timeouts
+    send
+  if cannot send:
+    cancel all async takes
+    set needs drain
+    return
+  else if cannot take:
+    on all alive srcs, start async takes which call onTaken(value, src)
+
+
+### onTaken(value, src):
+  if value is CLOSED:
+    return
+  clear src's cancel function
+  send value
+  turn()

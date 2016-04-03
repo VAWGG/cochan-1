@@ -3,9 +3,27 @@ import {Chan} from './chan'
 import {arrayPool} from './pools'
 import {TimeoutChan} from './special-chans'
 import {CLOSED, FAILED, ERROR} from './constants'
+import {SEND_TYPE_VALUE, SEND_TYPE_ERROR} from './constants'
 import {P_RESOLVED_WITH_TRUE, P_RESOLVED_WITH_FALSE} from './constants'
+import {EventEmitterMixin} from './event-emitter'
+
+
+const CANNOT_SEND_ERROR_MSG = `Sending and piping into a merge channel is not supported. ` +
+  `As a workaround, you can add one more channel into the merged set, and send/pipe into it.`
 
 const EMPTY = []
+
+const STATE_AWAITING_SEND = 0
+const STATE_ENQUEUEING_TAKES = 1
+const STATE_AWAITING_TAKE = 2
+const STATE_MERGING_SYNC = 3
+const STATE_ENDED = 4
+
+const STATE_NAMES = [
+  'STATE_AWAITING_SEND', 'STATE_ENQUEUEING_TAKES', 'STATE_AWAITING_TAKE',
+  'STATE_MERGING_SYNC', 'STATE_ENDED'
+]
+
 
 export class MergeChan extends Chan {
 
@@ -13,31 +31,29 @@ export class MergeChan extends Chan {
     super(bufferSize)
     this._srcs = srcs
     this._closeOnFinish = closeOnFinish
+    this._mergeState = STATE_AWAITING_SEND
     this._syncSrcs = arrayPool.take()
-    this._inSyncRegion = false
-    this._onMaybeCanSendSync_bnd = isAlive => this._onMaybeCanSendSync(isAlive)
     this._init(srcs)
-    this._maybeSendNext(undefined)
+    this._maybeSendNext()
   }
 
   _init(srcs) {
+    this._onDrain = () => this._maybeSendNext()
+    this.on('drain', this._onDrain)
+
     let timeoutSrcs = EMPTY
     let dataSrcs = arrayPool.take()
 
     for (let i = 0; i < srcs.length; ++i) {
       let chan = srcs[i]
       if (!chan.isClosed) {
-        let src = this._withHandlers({ chan,
-          subscribed: false,
-          onMaybeCanTakeSync: undefined,
-          onClosed: undefined
-        })
-        if (chan instanceof TimeoutChan) {
+        let isTimeout = chan instanceof TimeoutChan
+        let src = this._makeSrc(chan, isTimeout)
+        if (isTimeout) {
           if (timeoutSrcs === EMPTY) timeoutSrcs = arrayPool.take()
           timeoutSrcs.push(src)
         } else {
           dataSrcs.push(src)
-          chan.on('closed', src.onClosed)
         }
       }
     }
@@ -49,61 +65,65 @@ export class MergeChan extends Chan {
     this._totalDataSrcs = dataSrcs.length
   }
 
-  _withHandlers(src) {
-    src.onMaybeCanTakeSync = isAlive => this._onMaybeCanTakeSync(src, isAlive)
-    src.onClosed = () => this._onSrcClosed(src)
+  _makeSrc(chan, isTimeout) {
+    let src = { chan, cancel: undefined, onClosed: undefined,
+      onTakenValue: undefined, onTakenError: undefined }
+    if (isTimeout) {
+      src.onTakenValue = onTakenValueFromTimeoutChan
+    } else {
+      src.onTakenValue = value => this._onTaken(value, SEND_TYPE_VALUE, src)
+      src.onClosed = () => this._onSrcClosed(src)
+      src.chan.on('closed', src.onClosed)
+    }
+    src.onTakenError = error => this._onTaken(error, SEND_TYPE_ERROR, src)
     return src
   }
 
-  _maybeSendNext(syncSrc) {
-    let canSendSync = this.canSendSync
+  _maybeSendNext() {
+    assert(this._mergeState == STATE_AWAITING_SEND || this._mergeState == STATE_AWAITING_TAKE)
+    let canSendSync = this._super$canSendSync
     let canTakeMore = true
     let clearSyncState = true
-    this._inSyncRegion = true
+    this._mergeState = STATE_MERGING_SYNC
     while (canSendSync && canTakeMore) {
-      let syncResult; if (syncSrc) {
-        syncResult = syncSrc.chan._takeSync()
-        assert(syncResult !== false)
-        if (syncResult === true) {
-          syncResult = syncSrc.chan.value
-        }
-        syncSrc = undefined
-      } else {
-        syncResult = this._takeNextSync(clearSyncState)
-        clearSyncState = false
-      }
+      let syncResult = this._takeNextSync(clearSyncState)
+      clearSyncState = false
       if (syncResult === FAILED) {
         canTakeMore = false
       } else {
         if (syncResult === ERROR) {
-          syncResult = this._sendSync(ERROR.value, true)
+          syncResult = this._super$_sendSync(ERROR.value, true)
           assert(syncResult === true)
         } else {
-          syncResult = this._sendSync(syncResult, false)
+          syncResult = this._super$_sendSync(syncResult, false)
           assert(syncResult === true)
         }
-        canSendSync = this.canSendSync
+        canSendSync = this._super$canSendSync
       }
     }
-    this._inSyncRegion = false
     assert(canSendSync || canTakeMore)
     if (!this._totalDataSrcs && !this._totalTimeoutSrcs) {
       // no srcs left alive => end merging
       this._end()
-    } else if (canTakeMore && this.canTakeSync) {
+    } else if (!canSendSync) {
       // dst can't accept more data synchronously => wait until it can, then resume
-      this._maybeCanSendSync(this._onMaybeCanSendSync_bnd, false)
+      this._mergeState = STATE_AWAITING_SEND
+      this.setNeedsDrain()
+      this._cancelTakes()
     } else {
+      assert(canTakeMore == false && this._canTakeNextSync() == false)
+      this._mergeState = STATE_AWAITING_TAKE
       // srcs can't provide more data => wait until they can
-      this._totalTimeoutSrcs && this._subscribeForSrcs(this._timeoutSrcs)
-      this._totalDataSrcs && this._subscribeForSrcs(this._dataSrcs)
+      this._enqueueTakesFrom(this._timeoutSrcs, this._totalTimeoutSrcs)
+      this._enqueueTakesFrom(this._dataSrcs, this._totalDataSrcs)
     }
   }
 
   get canTakeSync() {
-    if (super.canTakeSync) {
-      return true
-    }
+    return super.canTakeSync || (this._mergeState != STATE_ENDED && this._canTakeNextSync())
+  }
+
+  _canTakeNextSync() {
     let srcs = this._timeoutSrcs
     let totalSrcs = this._totalTimeoutSrcs
     for (let i = 0; i < totalSrcs; ++i) {
@@ -122,6 +142,9 @@ export class MergeChan extends Chan {
   }
 
   _takeSync() {
+    if (this.isClosed) {
+      return false
+    }
     if (super._takeSync()) {
       return true
     }
@@ -134,28 +157,6 @@ export class MergeChan extends Chan {
       this._value = result
       return true
     }
-  }
-
-  _maybeCanTakeSync(fn, mayReturnPromise) {
-    let result = super._maybeCanTakeSync(fn, true)
-    if (result === P_RESOLVED_WITH_TRUE) {
-      if (mayReturnPromise) {
-        return result
-      } else {
-        fn(true)
-        return
-      }
-    }
-    if (result === P_RESOLVED_WITH_FALSE) {
-      if (mayReturnPromise) {
-        return result
-      } else {
-        fn(false)
-        return
-      }
-    }
-    this._totalTimeoutSrcs && this._subscribeForSrcs(this._timeoutSrcs)
-    this._totalDataSrcs && this._subscribeForSrcs(this._dataSrcs)
   }
 
   _takeNextSync(clearState) {
@@ -209,60 +210,86 @@ export class MergeChan extends Chan {
     return FAILED
   }
 
-  _subscribeForSrcs(srcs) {
-    for (let i = 0; i < srcs.length; ++i) {
+  _enqueueTakesFrom(srcs, total) {
+    assert(this._mergeState == STATE_AWAITING_TAKE)
+    if (total == 0) return
+    this._mergeState = STATE_ENQUEUEING_TAKES
+    for (let i = 0; i < total; ++i) {
       let src = srcs[i]
-      if (!src.subscribed) {
-        src.subscribed = true
-        src.chan._maybeCanTakeSync(src.onMaybeCanTakeSync, false)
+      if (!src.cancel) {
+        src.cancel = src.chan._take(src.onTakenValue, src.onTakenError, true)
+      }
+    }
+    this._mergeState = STATE_AWAITING_TAKE
+  }
+
+  _cancelTakes() {
+    this._cancelTakesFrom(this._timeoutSrcs, this._totalTimeoutSrcs)
+    this._cancelTakesFrom(this._dataSrcs, this._totalDataSrcs)
+  }
+
+  _cancelTakesFrom(srcs, total) {
+    for (let i = 0; i < total; ++i) {
+      let src = srcs[i]
+      if (src.cancel) {
+        src.cancel()
+        src.cancel = undefined
       }
     }
   }
 
-  _onMaybeCanSendSync(dstAlive) {
-    if (this._dataSrcs === EMPTY) {
-      return // already ended
-    } else if (dstAlive) {
-      this._maybeSendNext(undefined)
-    } else {
-      this._end()
-    }
-  }
-
-  _onMaybeCanTakeSync(src, srcAlive) {
-    if (this._dataSrcs === EMPTY || !srcAlive) {
-      return // already ended
-    }
-    src.subscribed = false
-    this._maybeSendNext(src.chan.canTakeSync ? src : undefined)
+  _onTaken(value, type, src) {
+    assert(this._mergeState == STATE_AWAITING_TAKE, onTakenInvalidStateMsg(this._mergeState, src))
+    src.cancel = undefined
+    if (value == CLOSED) return
+    let sent = this._super$_sendSync(value, type)
+    assert(sent == true)
+    this._maybeSendNext()
   }
 
   _onSrcClosed(src) {
-    assert(this._dataSrcs !== EMPTY) // otherwise this event would not be received, see end()
+    // otherwise this event would have not been received, see end()
+    assert(this._mergeState != STATE_ENDED)
     src.chan.removeListener('closed', src.onClosed)
     let index = this._dataSrcs.indexOf(src)
     assert(index >= 0)
     this._dataSrcs.splice(index, 1)
-    if (!--this._totalDataSrcs && !this._totalTimeoutSrcs && !this._inSyncRegion) {
+    if (!--this._totalDataSrcs && !this._totalTimeoutSrcs && this._mergeState != STATE_MERGING_SYNC) {
+      this._end()
+    }
+  }
+
+  _close() {
+    super._close()
+    if (this._mergeState != STATE_ENDED) {
       this._end()
     }
   }
 
   _end() {
-    assert(this._dataSrcs !== EMPTY)
-    let dataSrcs = this._dataSrcs
-    let totalDataSrcs = this._totalDataSrcs
-    for (let i = 0; i < totalDataSrcs; ++i) {
-      let src = dataSrcs[i]
-      src.chan.removeListener('closed', src.onClosed)
-    }
-    arrayPool.put(dataSrcs)
-    this._dataSrcs = EMPTY
-    if (this._timeoutSrcs !== EMPTY) {
-      arrayPool.put(this._timeoutSrcs)
+    assert(this._mergeState != STATE_ENDED)
+    this._mergeState = STATE_ENDED
+    this.removeListener('drain', this._onDrain)
+    freeSrcs(this._dataSrcs, this._totalDataSrcs)
+    let totalTimeoutSrcs = this._totalTimeoutSrcs
+    if (totalTimeoutSrcs) {
+      assert(this._timeoutSrcs !== EMPTY)
+      freeSrcs(this._timeoutSrcs, totalTimeoutSrcs)
     }
     arrayPool.put(this._syncSrcs)
-    this._closeOnFinish && this.close()
+    if (this._closeOnFinish && !this.isClosed) {
+      this.close()
+    }
+  }
+
+  _cancelTake(item) {
+    let buf = this._buffer
+    let index = buf.indexOf(item)
+    if (index == -1) return
+    buf.splice(index, 1)
+    if (buf.length == 0) {
+      this._cancelTakes()
+    }
   }
 
   get _constructorName() {
@@ -272,4 +299,107 @@ export class MergeChan extends Chan {
   get _constructorArgsDesc() {
     return this._srcs
   }
+
+  _maybeCanTakeSync(fn, mayReturnPromise) {
+    if (this.canTakeSync) {
+      return mayReturnPromise ? P_RESOLVED_WITH_TRUE : (fn(true), undefined)
+    }
+    if (this._mergeState == STATE_ENDED) {
+      return mayReturnPromise ? P_RESOLVED_WITH_FALSE : (fn(false), undefined)
+    }
+    fn = callOnce1(fn)
+    let srcs = this._dataSrcs
+    for (let i = 0; i < srcs.length; ++i) {
+      srcs[i].chan._maybeCanTakeSync(fn, false)
+    }
+    super._maybeCanTakeSync(fn, false)
+  }
+
+  get canSend() {
+    return false
+  }
+
+  get canSendSync() {
+    return false
+  }
+
+  _maybeCanSendSync(fn, mayReturnPromise) {
+    if (mayReturnPromise) {
+      return this.isActive ? P_RESOLVED_WITH_TRUE : P_RESOLVED_WITH_FALSE
+    } else {
+      fn(this.isActive)
+    }
+  }
+
+  send(value, type) {
+    this._throwSendingNotSupported()
+  }
+
+  _sendSync(value, type) {
+    this._throwSendingNotSupported()
+  }
+
+  _send(value, type, fnVal, fnErr, needsCancelFn) {
+    this._throwSendingNotSupported()
+  }
+
+  emit(event/* ...args */) {
+    if (event == 'pipe') {
+      this._throwSendingNotSupported()
+    }
+    this._super$emit.apply(this, arguments)
+  }
+
+  _throwSendingNotSupported() {
+    throw new Error(CANNOT_SEND_ERROR_MSG)
+  }
 }
+
+function freeSrcs(srcs, total) {
+  for (let i = 0; i < total; ++i) {
+    let src = srcs[i]
+    if (src.onClosed) {
+      src.chan.removeListener('closed', src.onClosed)
+    }
+    if (src.cancel) {
+      src.cancel()
+    }
+  }
+  arrayPool.put(srcs)
+}
+
+function onTakenValueFromTimeoutChan(value) {
+  assert(false, `taken value ${value} from a timeout chan`)
+}
+
+function onTakenInvalidStateMsg(state, src) {
+  return state == STATE_ENQUEUEING_TAKES
+    ? `one of the source channels, ${src.chan}, called its _take callback synchronously ` +
+      `despite the fact that it reported that it cannot be synchronously taken from`
+    : `internal inconsistency error`
+}
+
+function callOnce1(fn) {
+  let doCall = true; return arg => {
+    if (doCall) {
+      doCall = false
+      fn(arg)
+    }
+  }
+}
+
+Object.defineProperties(MergeChan.prototype, {
+  _super$emit: {
+    value: EventEmitterMixin.emit,
+    writable: true,
+    enumerable: false,
+    configurable: true
+  },
+  _super$_sendSync: {
+    value: Chan.prototype._sendSync,
+    writable: true,
+    enumerable: false,
+    configurable: true
+  },
+  _super$canSendSync: Object.getOwnPropertyDescriptor(Chan.prototype, 'canSendSync')
+})

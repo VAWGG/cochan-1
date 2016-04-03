@@ -1,6 +1,6 @@
 import assert from 'power-assert'
 import schedule from './schedule'
-import {P_RESOLVED} from './constants'
+import {P_RESOLVED, SEND_TYPE_VALUE} from './constants'
 
 // TODO: test unpiping, see:
 //
@@ -8,10 +8,6 @@ import {P_RESOLVED} from './constants'
 // https://github.com/nodejs/node/blob/master/lib/_stream_readable.js#L615
 //
 class WritableStreamMixin {
-
-  _initWritableStream() {
-    this._needsDrain = false
-  }
 
   write(chunk, encoding, cb) {
     if (!this.isActive) {
@@ -27,13 +23,12 @@ class WritableStreamMixin {
       cb = encoding
       encoding = null
     }
-    if (this.sendSync(chunk)) {
+    if (this._sendSync(chunk, SEND_TYPE_VALUE)) {
       cb && schedule.microtask(cb)
       return true
     }
-    let {promise} = this._send(chunk, false, cb, cb, false)
-    promise && promise.then(cb, cb)
     this._needsDrain = true
+    this._send(chunk, SEND_TYPE_VALUE, cb, cb, false)
     return false
   }
 
@@ -60,12 +55,6 @@ class WritableStreamMixin {
     } else {
       this.close()
     }
-  }
-
-  _emitDrain() {
-    assert(this._needsDrain)
-    this._needsDrain = false
-    this.emit('drain')
   }
 
   // these are noops:

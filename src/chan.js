@@ -3,6 +3,7 @@ import schedule from './schedule'
 import {Thenable} from './thenable'
 import {nop} from './utils'
 import {CLOSED, FAILED, OP_SEND, ERROR} from './constants'
+import {SEND_TYPE_VALUE, SEND_TYPE_ERROR, SEND_TYPE_INTENT} from './constants'
 import {P_RESOLVED, P_RESOLVED_WITH_FALSE, P_RESOLVED_WITH_TRUE} from './constants'
 
 
@@ -11,9 +12,9 @@ const STATE_WAITING_FOR_PUBLISHER = 1
 const STATE_CLOSING = 2
 const STATE_CLOSED = 3
 
-const TYPE_VALUE = 0
-const TYPE_ERROR = 1
-const TYPE_CANCELLED = 2
+const STATE_NAMES = [
+  'STATE_NORMAL', 'STATE_WAITING_FOR_PUBLISHER', 'STATE_CLOSING', 'STATE_CLOSED'
+]
 
 // TODO: test "finish" event emitting.
 // TODO: waiters wait no more than a predefined amount of time.
@@ -21,7 +22,6 @@ const TYPE_CANCELLED = 2
 export class Chan {
 
   constructor(bufferSize) {
-    this._initWritableStream()
     this._state = STATE_NORMAL
     this._bufferSize = bufferSize
     this._buffer = []
@@ -59,21 +59,20 @@ export class Chan {
     return this._state != STATE_WAITING_FOR_PUBLISHER && this._buffer.length > 0
   }
 
-  _sendSync(value, isError) {
+  _sendSync(value, type) {
     if (this._state >= STATE_CLOSING) {
       return false
     }
 
     let wasWaitingForPublisher = this._state == STATE_WAITING_FOR_PUBLISHER
-    if (wasWaitingForPublisher && this._sendToWaitingConsumer(value, isError)) {
+    if (wasWaitingForPublisher && this._sendToWaitingConsumer(value, type)) {
       return true
     }
 
     assert(this._state == STATE_NORMAL)
 
     if (this._buffer.length < this._bufferSize) {
-      this._buffer.push({ value, type: isError ? TYPE_ERROR : TYPE_VALUE,
-        fnVal: undefined, fnErr: undefined })
+      this._buffer.push({ value, type, fnVal: undefined, fnErr: undefined })
       if (wasWaitingForPublisher) {
         // notify all waiters for opportunity to consume
         this._triggerWaiters(true)
@@ -94,14 +93,14 @@ export class Chan {
     return false
   }
 
-  _send(value, isError, fnVal, fnErr, needsCancelFn) {
+  _send(value, type, fnVal, fnErr, needsCancelFn) {
     if (this._state >= STATE_CLOSING) {
       fnErr(new Error('attempt to send into a closed channel'))
       return nop
     }
 
     let wasWaitingForPublisher = this._state == STATE_WAITING_FOR_PUBLISHER
-    if (wasWaitingForPublisher && this._sendToWaitingConsumer(value, isError)) {
+    if (wasWaitingForPublisher && this._sendToWaitingConsumer(value, type)) {
       fnVal(value)
       return nop
     }
@@ -111,12 +110,11 @@ export class Chan {
     let cancel
 
     if (this._buffer.length < this._bufferSize) {
-      this._buffer.push({ value, type: isError ? TYPE_ERROR : TYPE_VALUE,
-        fnVal: undefined, fnErr: undefined })
+      this._buffer.push({ value, type, fnVal: undefined, fnErr: undefined })
       cancel = nop
       fnVal(value)
     } else {
-      let item = { value, type: isError ? TYPE_ERROR : TYPE_VALUE, fnVal, fnErr }
+      let item = { value, type, fnVal, fnErr }
       cancel = () => this._cancelSend(item)
       this._buffer.push(item)
     }
@@ -151,18 +149,16 @@ export class Chan {
       return false
     }
 
-    let type = item.type
-    assert(type == TYPE_VALUE || type == TYPE_ERROR)
-
-    item.fnVal && item.fnVal(item.value)
-
     if (this._state < STATE_CLOSING && this._buffer.length < this._bufferSize) {
       let waiters = this._waiters.length ? this._waiters.splice(0) : undefined
       this._needsDrain && this._emitDrain()
       waiters && triggerWaiters(waiters, this._state < STATE_CLOSING)
     }
 
-    if (type == TYPE_ERROR) {
+    assert(item.type == SEND_TYPE_VALUE || item.type == SEND_TYPE_ERROR)
+    item.fnVal && item.fnVal(item.value)
+
+    if (item.type == SEND_TYPE_ERROR) {
       ERROR.value = item.value
       return ERROR
     }
@@ -180,14 +176,14 @@ export class Chan {
     if (prevState != STATE_WAITING_FOR_PUBLISHER) {
       let item = this._takeFromWaitingPublisher()
       if (item !== FAILED) {
-        assert(item.type == TYPE_VALUE || item.type == TYPE_ERROR)
-        let fn = item.type == TYPE_VALUE ? fnVal : fnErr
-        item.fnVal && item.fnVal(item.value) // this may change item.type to TYPE_CANCELLED
+        assert(item.type == SEND_TYPE_VALUE || item.type == SEND_TYPE_ERROR)
+        let fn = item.type == SEND_TYPE_VALUE ? fnVal : fnErr
+        item.fnVal && item.fnVal(item.value)
         fn && fn(item.value)
         if (this._state == STATE_NORMAL && this._buffer.length < this._bufferSize) {
           let waiters = this._waiters.length ? this._waiters.splice(0) : undefined
           this._needsDrain && this._emitDrain()
-          waiters && triggerWaiters(waiters, this._state < STATE_CLOSING)
+          if (waiters) triggerWaiters(waiters, this._state < STATE_CLOSING)
         }
         return nop
       }
@@ -198,14 +194,22 @@ export class Chan {
     let item = { fnVal, fnErr }
     this._buffer.push(item)
 
-    if (prevState == STATE_NORMAL) {
-      // notify all waiters for the opportunity to publish
-      let waiters = this._waiters.length ? this._waiters.splice(0) : undefined
-      this._needsDrain && this._emitDrain() // TODO: probably not needed here
-      waiters && triggerWaiters(waiters, this._state < STATE_CLOSING)
+    let waiters
+
+    if (prevState == STATE_NORMAL && this._waiters.length) {
+      waiters = this._waiters.splice(0)
     }
 
-    return needsCancelFn ? () => { item.fnVal = item.fnErr = undefined } : nop
+    if (this._needsDrain) {
+      this._emitDrain()
+    }
+
+    if (waiters) {
+      // notify all waiters for the opportunity to publish
+      triggerWaiters(waiters, this._state < STATE_CLOSING)
+    }
+
+    return needsCancelFn ? () => this._cancelTake(item) : nop
   }
 
   _maybeCanTakeSync(fn, mayReturnPromise) {
@@ -369,9 +373,20 @@ export class Chan {
     --len
 
     assert(item != undefined)
-    assert(item.type == TYPE_VALUE || item.type == TYPE_ERROR)
+    assert(item.type == SEND_TYPE_VALUE
+      || item.type == SEND_TYPE_ERROR
+      || item.type == SEND_TYPE_INTENT)
 
-    if (item.type == TYPE_VALUE) {
+    if (item.type == SEND_TYPE_INTENT) {
+      item.value = item.value()
+      if (item.value === ERROR) {
+        item.value = ERROR.value
+        item.type = SEND_TYPE_ERROR
+      } else {
+        item.type = SEND_TYPE_VALUE
+        this._value = item.value
+      }
+    } else if (item.type == SEND_TYPE_VALUE) {
       this._value = item.value
     }
 
@@ -404,14 +419,19 @@ export class Chan {
     assert(this._state == STATE_NORMAL || this._state == STATE_CLOSING)
     // the send cannot be buffered
     assert(index >= this._bufferSize)
-    buf.splice(index)
+    buf.splice(index, 1)
     let len = buf.length
     if (this._state == STATE_CLOSING && buf.length == 0) {
       this._close()
     }
   }
 
-  _sendToWaitingConsumer(value, isError) {
+  _cancelTake(item) {
+    item.fnVal = undefined
+    item.fnErr = undefined
+  }
+
+  _sendToWaitingConsumer(value, type) {
     assert(this._state == STATE_WAITING_FOR_PUBLISHER)
 
     if (this._buffer.length == 0) {
@@ -436,11 +456,19 @@ export class Chan {
       this._state = STATE_NORMAL
     }
 
-    if (isError) {
-      item.fnErr && item.fnErr(value)
-    } else {
+    if (type == SEND_TYPE_INTENT) {
+      value = value()
+      if (value === ERROR) {
+        item.fnErr && item.fnErr(ERROR.value)
+      } else {
+        this._value = value
+        item.fnVal && item.fnVal(value)
+      }
+    } else if (type == SEND_TYPE_VALUE) {
       this._value = value
       item.fnVal && item.fnVal(value)
+    } else {
+      item.fnErr && item.fnErr(value)
     }
 
     return true
@@ -484,8 +512,7 @@ export class Chan {
   }
 
   get _stateName() {
-    let names = ['STATE_NORMAL', 'STATE_WAITING_FOR_PUBLISHER', 'STATE_CLOSING', 'STATE_CLOSED']
-    return names[ this._state ]
+    return STATE_NAMES[ this._state ]
   }
 }
 

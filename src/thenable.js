@@ -1,6 +1,7 @@
 import assert from 'power-assert'
 import schedule from './schedule'
 import {OP_TAKE, OP_SEND, THENABLE_MIXED_USE_MSG} from './constants'
+import {SEND_TYPE_VALUE, SEND_TYPE_ERROR} from './constants'
 import {arrayPool} from './pools'
 
 const DEBUG = true
@@ -141,7 +142,7 @@ export class Thenable {
       }chan = ${ this._chan || '<no>'
       }, op = ${ this._op == OP_TAKE ? 'take' :
          this._op == OP_SEND ? 'send ' + describeBox(this._sendData) : '<no>'
-      }, result = ${ this._result ? describeBox(this._result) : '<no>'
+      }, result = ${ describeBox(this._result)
       }, seal = ${ this._isSealed ? 1 : 0
       })`
   }
@@ -163,8 +164,12 @@ function wrapHandler(handler, resolve, reject) {
 
 function describeBox(pair) {
   return pair
-    ? pair.isError ? `Error(${pair.value})` : `Value(${pair.value})`
-    : '<no>'
+    ? pair.isError || pair.type == SEND_TYPE_ERROR
+      ? `Error(${pair.value})`
+      : pair.type == SEND_TYPE_VALUE
+        ? `Value(${pair.value})`
+        : `SendIntent(fn.${ pair.value.name || 'anon' })`
+    : `<no>`
 }
 
 Thenable.prototype._cancel = undefined

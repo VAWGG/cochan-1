@@ -86,7 +86,6 @@ const EventEmitterMixin = {
 
 EventEmitterMixin.on = EventEmitterMixin.addListener
 EventEmitterMixin.once = EventEmitterMixin.addListenerOnce
-EventEmitterMixin.off = EventEmitterMixin.removeListener
 
 function emitNone(listeners, emitter) {
   let len = listeners.length; listeners = arrayClone(listeners, len)

@@ -1,5 +1,6 @@
 import assert from 'power-assert'
 import {isThenable} from './utils'
+import {SEND_TYPE_VALUE, SEND_TYPE_ERROR} from './constants'
 
 
 export function thenableRunner(runnable, type) {
@@ -22,8 +23,9 @@ export function fromIterator(iter, chan, closeChan, sendRetval, { runner, getRun
       return end()
     }
     if (done) {
-      if ((sendRetval || valueToSendIsError) && !chan.sendSync(valueToSend, valueToSendIsError)) {
-        chan._send(valueToSend, valueToSendIsError, undefined, sendToActiveChanFailed, false)
+      let sendType = valueToSendIsError ? SEND_TYPE_ERROR : SEND_TYPE_VALUE
+      if ((sendRetval || valueToSendIsError) && !chan.sendSync(valueToSend, sendType)) {
+        chan._send(valueToSend, sendType, undefined, sendToActiveChanFailed, false)
       }
       return end()
     }
@@ -58,7 +60,7 @@ export function fromIterator(iter, chan, closeChan, sendRetval, { runner, getRun
         if (sendRetval || hasNextValue || state.isError) {
           canSendSync = chan.canSendSync
           if (canSendSync) {
-            chan.sendSync(state.value, state.isError)
+            chan.sendSync(state.value, state.isError ? SEND_TYPE_ERROR : SEND_TYPE_VALUE)
           }
         }
       }
@@ -85,14 +87,16 @@ export function fromIterator(iter, chan, closeChan, sendRetval, { runner, getRun
       if (hasNextValue) {
         // iter has not ended yet => enqueue the value into the chan, and
         // resume iteration after it's accepted
-        chan._send(state.value, state.isError, onValueSent, sendToActiveChanFailed, false)
+        chan._send(state.value, state.isError ? SEND_TYPE_ERROR : SEND_TYPE_VALUE,
+          onValueSent, sendToActiveChanFailed, false)
       } else {
         // iter has ended, so we just need to send its last value (if iter is
         // generator), and end the whole thing; we don't need to wait until
         // the value is accepted, because even if end() calls chan.close(), 
         // the latter will do this waiting for us
         if (sendRetval || state.isError) {
-          chan._send(state.value, state.isError, undefined, sendToActiveChanFailed, false)
+          chan._send(state.value, state.isError ? SEND_TYPE_ERROR : SEND_TYPE_VALUE,
+            undefined, sendToActiveChanFailed, false)
         }
         end()
       }

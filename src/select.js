@@ -124,7 +124,7 @@ function _selectSync(/* ...ops */) {
     assert(op.promise != undefined)
     assert(op.promise._sendData != undefined)
     let data = op.promise._sendData
-    let success = chan._sendSync(data.value, data.isError)
+    let success = chan._sendSync(data.value, data.type)
     if (success === ERROR) {
       return ERROR
     }
