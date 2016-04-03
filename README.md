@@ -37,7 +37,7 @@ be advanced until the last produced value is either consumed or buffered.
 ## Implementation status
 
 Not ready for producution until 1.0 is released. API and semantics may change, and there
-may be some bugs as the code is not covered by unit tests yet (TBD before 1.0).
+may be some bugs as the code is not completely covered with unit tests yet (TBD before 1.0).
 
 However, I encourage you to play with examples and, maybe, try using the project in some
 experimental or self-educational work. Please report any bugs you find and ask any
@@ -826,7 +826,8 @@ All files            |       75 |    63.23 |    65.54 |    75.52 |
 ## TODO
 
 * API docs.
-* Cover with tests: merge, iterator/generator, special chans, streams, event emitter.
+* Cover with tests: error values, special chans, unidirectional chans, streams,
+  event emitter, iterator/generator.
 * Provide missing examples for `generators-co` and `plain-promises`.
 * Support [async iteration](https://github.com/tc39/proposal-async-iteration)?
 
