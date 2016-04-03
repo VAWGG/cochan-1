@@ -533,14 +533,14 @@ options (default values are shown):
 
 ```js
 var chMerged = chan.merge(ch1, ch2, ch3, {
-  // if provided, this channel will be used as the output one, and returned from the merge call
-  output: undefined,
-  // if output is not provided, what buffer size to specify when creating output channel
-  bufferSize: 0,
-  // whether to close output channel when all input ones have closed
-  closeOutput: true
+  bufferSize: 0 // buffer size of the resulting merge channel
 })
 ```
+
+The resulting channel is read-only, i.e. you cannot send a value or pipe a stream
+into it. However, you can close it, which will stop consuming new values from input
+chans immediately. Otherwise, the channel will be closed as soon as all non-timeout
+input chan are closed.
 
 > **Examples:**<br>
 > Merging channels: [async-await](_examples/async-await/11-merge.js).
@@ -799,24 +799,24 @@ than expected) due to [an issue in nyc/istanbul].
 ---------------------|----------|----------|----------|----------|
 File                 |  % Stmts | % Branch |  % Funcs |  % Lines |
 ---------------------|----------|----------|----------|----------|
- src/                |    75.07 |    63.35 |    67.35 |    75.46 |
-  chan.js            |    95.69 |    93.78 |      100 |    95.55 |
-  constants.js       |    93.33 |      100 |      100 |    92.86 |
-  event-emitter.js   |    45.98 |    33.33 |    35.71 |    49.35 |
-  index.js           |    80.23 |    58.65 |    58.33 |    79.88 |
-  iterator.js        |    13.25 |        0 |        0 |    13.58 |
-  merge.js           |      100 |    96.92 |      100 |      100 |
+ src/                |       75 |    63.23 |    65.54 |    75.52 |
+  chan.js            |    94.01 |    92.09 |      100 |    94.25 |
+  constants.js       |    94.44 |      100 |      100 |    94.12 |
+  event-emitter.js   |    47.67 |    33.33 |    42.86 |    51.32 |
+  index.js           |    74.46 |       48 |       50 |    74.43 |
+  iterator.js        |     13.1 |        0 |        0 |    13.41 |
+  merge.js           |     99.1 |    95.96 |    90.91 |    99.06 |
   pool.js            |    86.21 |     62.5 |      100 |    86.21 |
   pools.js           |      100 |      100 |      100 |      100 |
   schedule.js        |    47.06 |       50 |        0 |    53.85 |
   select.js          |    98.06 |    96.59 |      100 |    98.01 |
   special-chans.js   |    70.97 |     49.3 |    80.95 |    71.77 |
-  thenable.js        |    94.59 |       64 |    88.89 |    94.59 |
-  unidirectional.js  |       40 |    22.73 |       75 |       40 |
-  utils.js           |    63.49 |    32.69 |    45.45 |    64.52 |
-  writable-stream.js |     5.88 |        0 |       50 |     5.88 |
+  thenable.js        |    94.59 |    59.26 |    88.89 |    94.59 |
+  unidirectional.js  |    17.53 |    13.64 |    55.56 |    17.53 |
+  utils.js           |    65.08 |    34.62 |    54.55 |    66.13 |
+  writable-stream.js |    43.33 |       40 |       50 |    43.33 |
 ---------------------|----------|----------|----------|----------|
-All files            |    75.07 |    63.35 |    67.35 |    75.46 |
+All files            |       75 |    63.23 |    65.54 |    75.52 |
 ---------------------|----------|----------|----------|----------|
 ```
 
