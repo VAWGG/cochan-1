@@ -887,7 +887,7 @@ test(`can be closed, which stops merging right now (case 1)`, async t => {
   t.ok(m.isClosed == false && m.isActive == true && m.canTakeSync == true)
 
   t.ok(m.closeSync())
-  t.ok(m.isClosed == true && m.isActive == false && m.canTakeSync == false)
+  t.ok(m.isClosed == true && m.isActive == false && m.canTakeSync == false && m.takeSync() == false)
   t.is(chan.CLOSED, await m.take())
 
   t.ok(a.takeSync() && a.value == 'a')
@@ -911,7 +911,7 @@ test(`can be closed, which stops merging right now (case 2)`, async t => {
   t.ok(b.sendSync('b-1'))
 
   t.ok(m.closeSync())
-  t.ok(m.isClosed == true && m.isActive == false && m.canTakeSync == false)
+  t.ok(m.isClosed == true && m.isActive == false && m.canTakeSync == false && m.takeSync() == false)
   t.is(chan.CLOSED, await m.take())
 
   t.ok(a.takeSync() && a.value == 'a-2')
@@ -928,12 +928,12 @@ test(`can be closed, which stops merging right now (case 3)`, async t => {
   t.ok(m.isClosed == false && m.isActive == true)
 
   t.ok(m.closeSync())
-  t.ok(m.isClosed == true && m.isActive == false && m.canTakeSync == false)
+  t.ok(m.isClosed == true && m.isActive == false && m.canTakeSync == false && m.takeSync() == false)
   t.is(chan.CLOSED, await m.take())
 
   await t.sleep(53)
 
-  t.ok(m.isClosed == true && m.isActive == false && m.canTakeSync == false)
+  t.ok(m.isClosed == true && m.isActive == false && m.canTakeSync == false && m.takeSync() == false)
   t.is(chan.CLOSED, await m.take())
 })
 
@@ -949,7 +949,7 @@ test(`can be closed, which stops merging right now (case 4)`, async t => {
   await t.nextTick()
 
   m.close()
-  t.ok(m.isClosed == true && m.isActive == false)
+  t.ok(m.isClosed == true && m.isActive == false && m.canTakeSync == false && m.takeSync() == false)
   t.is(chan.CLOSED, await m.take())
   t.ok(recv === chan.CLOSED)
 })

@@ -38,7 +38,8 @@ export class MergeChan extends Chan {
   }
 
   _init(srcs) {
-    this.on('drain', () => this._maybeSendNext())
+    this._onDrain = () => this._maybeSendNext()
+    this.on('drain', this._onDrain)
 
     let timeoutSrcs = EMPTY
     let dataSrcs = arrayPool.take()
@@ -119,7 +120,7 @@ export class MergeChan extends Chan {
   }
 
   get canTakeSync() {
-    return super.canTakeSync || this._canTakeNextSync()
+    return super.canTakeSync || (this._mergeState != STATE_ENDED && this._canTakeNextSync())
   }
 
   _canTakeNextSync() {
@@ -141,6 +142,9 @@ export class MergeChan extends Chan {
   }
 
   _takeSync() {
+    if (this.isClosed) {
+      return false
+    }
     if (super._takeSync()) {
       return true
     }
@@ -265,6 +269,7 @@ export class MergeChan extends Chan {
   _end() {
     assert(this._mergeState != STATE_ENDED)
     this._mergeState = STATE_ENDED
+    this.removeListener('drain', this._onDrain)
     freeSrcs(this._dataSrcs, this._totalDataSrcs)
     let totalTimeoutSrcs = this._totalTimeoutSrcs
     if (totalTimeoutSrcs) {
