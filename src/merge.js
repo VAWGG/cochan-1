@@ -255,6 +255,13 @@ export class MergeChan extends Chan {
     }
   }
 
+  _close() {
+    super._close()
+    if (this._mergeState != STATE_ENDED) {
+      this._end()
+    }
+  }
+
   _end() {
     assert(this._mergeState != STATE_ENDED)
     this._mergeState = STATE_ENDED
@@ -265,7 +272,7 @@ export class MergeChan extends Chan {
       freeSrcs(this._timeoutSrcs, totalTimeoutSrcs)
     }
     arrayPool.put(this._syncSrcs)
-    if (this._closeOnFinish) {
+    if (this._closeOnFinish && !this.isClosed) {
       this.close()
     }
   }

@@ -875,6 +875,86 @@ test(`when any of the chans are expired timeout chans, yields error`, async t =>
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`can be closed, which stops merging right now (case 1)`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let a = chan(1)
+  let b = chan(1)
+
+  t.ok(a.sendSync('a'))
+  t.ok(b.sendSync('b'))
+
+  let m = chan.merge(a, b)
+  t.ok(m.isClosed == false && m.isActive == true && m.canTakeSync == true)
+
+  t.ok(m.closeSync())
+  t.ok(m.isClosed == true && m.isActive == false && m.canTakeSync == false)
+  t.is(chan.CLOSED, await m.take())
+
+  t.ok(a.takeSync() && a.value == 'a')
+  t.ok(b.takeSync() && b.value == 'b')
+
+  t.is(chan.CLOSED, await m.take())
+})
+
+test(`can be closed, which stops merging right now (case 2)`, async t => {
+  let a = chan(1)
+  let b = chan(1)
+
+  t.ok(a.sendSync('a-1'))
+
+  let m = chan.merge(a, b)
+  t.ok(m.isClosed == false && m.isActive == true)
+
+  t.ok(m.takeSync() && m.value == 'a-1')
+
+  t.ok(a.sendSync('a-2'))
+  t.ok(b.sendSync('b-1'))
+
+  t.ok(m.closeSync())
+  t.ok(m.isClosed == true && m.isActive == false && m.canTakeSync == false)
+  t.is(chan.CLOSED, await m.take())
+
+  t.ok(a.takeSync() && a.value == 'a-2')
+  t.ok(b.takeSync() && b.value == 'b-1')
+
+  t.is(chan.CLOSED, await m.take())
+})
+
+test(`can be closed, which stops merging right now (case 3)`, async t => {
+  let a = chan(1)
+  let T = chan.timeout(42)
+
+  let m = chan.merge(a, T)
+  t.ok(m.isClosed == false && m.isActive == true)
+
+  t.ok(m.closeSync())
+  t.ok(m.isClosed == true && m.isActive == false && m.canTakeSync == false)
+  t.is(chan.CLOSED, await m.take())
+
+  await t.sleep(53)
+
+  t.ok(m.isClosed == true && m.isActive == false && m.canTakeSync == false)
+  t.is(chan.CLOSED, await m.take())
+})
+
+test(`can be closed, which stops merging right now (case 4)`, async t => {
+  let a = chan()
+  let b = chan()
+
+  let m = chan.merge(a, b)
+  t.ok(m.isClosed == false && m.isActive == true)
+
+  let recv = NOT_YET
+  m.take().then(v => recv = v).catch(t.fail)
+  await t.nextTick()
+
+  m.close()
+  t.ok(m.isClosed == true && m.isActive == false)
+  t.is(chan.CLOSED, await m.take())
+  t.ok(recv === chan.CLOSED)
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 test(`can be composed (case 1)`, async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
   let a = chan().named('a')
