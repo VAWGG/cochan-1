@@ -28,10 +28,9 @@ const STATE_NAMES = [
 
 export class MergeChan extends Chan {
 
-  constructor(srcs, bufferSize, closeOnFinish) {
+  constructor(srcs, bufferSize) {
     super(bufferSize)
     this._srcs = srcs
-    this._closeOnFinish = closeOnFinish
     this._mergeState = STATE_AWAITING_SEND
     this._syncSrcs = arrayPool.take()
     this._init(srcs)
@@ -282,9 +281,7 @@ export class MergeChan extends Chan {
       freeSrcs(this._timeoutSrcs, totalTimeoutSrcs)
     }
     arrayPool.put(this._syncSrcs)
-    if (this._closeOnFinish && !this.isClosed) {
-      this.close()
-    }
+    if (!this.isClosed) this.close()
   }
 
   _cancelTake(item) {

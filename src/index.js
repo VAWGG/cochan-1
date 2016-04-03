@@ -92,7 +92,6 @@ chan.fromPromise = function fromPromise(promise) {
 
 
 const MERGE_DEFAULTS = {
-  closeOnFinish: true,
   bufferSize: 0
 }
 
@@ -104,10 +103,7 @@ chan.merge = function merge(/* ...chans */) {
   } else {
     opts = MERGE_DEFAULTS
   }
-  return new MergeChan(chans,
-    defaultTo(MERGE_DEFAULTS.bufferSize, opts.bufferSize),
-    defaultTo(MERGE_DEFAULTS.closeOnFinish, opts.closeOnFinish)
-  )
+  return new MergeChan(chans, defaultTo(MERGE_DEFAULTS.bufferSize, opts.bufferSize))
 }
 
 chan.merge.setDefaults = function merge$setDefaults(opts) {
