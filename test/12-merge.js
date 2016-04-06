@@ -460,6 +460,74 @@ test(`canTakeSync and takeSync behave properly when the output is buffered`, asy
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`supports errors (one input)`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan(2)
+  let m = chan.merge(ch)
+
+  t.ok(ch.sendErrorSync(new Error('oops')))
+  t.ok(ch.sendErrorSync(new Error('ohno')))
+
+  t.ok(m.canTakeSync)
+
+  await t.throws(m.take(), 'oops')
+  t.throws(() => m.takeSync(), 'ohno')
+})
+
+test(`supports errors (multiple inputs, async take)`, async t => {
+  let ch1 = chan(1)
+  let ch2 = chan(1)
+  let ch3 = chan(1)
+
+  t.ok(ch1.sendErrorSync(new Error('oops')))
+  t.ok(ch2.sendErrorSync(new Error('ohno')))
+  t.ok(ch3.sendErrorSync(new Error('ahah')))
+
+  let m = chan.merge(ch1, ch2, ch3)
+  t.ok(m.canTakeSync)
+
+  let errors = []
+
+  m.take().then(t.fail, e => errors.push(e.message))
+  m.take().then(t.fail, e => errors.push(e.message))
+  m.take().then(t.fail, e => errors.push(e.message))
+
+  await t.nextTick()
+
+  t.ok(errors.length == 3)
+  t.ok(errors.indexOf('oops') >= 0 && errors.indexOf('ohno') >= 0 && errors.indexOf('ahah') >= 0)
+})
+
+test(`supports errors (multiple inputs, sync take)`, async t => {
+  let ch1 = chan(1)
+  let ch2 = chan(1)
+  let ch3 = chan(1)
+
+  t.ok(ch1.sendErrorSync(new Error('oops')))
+  t.ok(ch2.sendErrorSync(new Error('ohno')))
+  t.ok(ch3.sendErrorSync(new Error('ahah')))
+
+  let m = chan.merge(ch1, ch2, ch3)
+  t.ok(m.canTakeSync)
+
+  let errors = [], pushError = fn => {
+    try {
+      fn()
+      t.fail(`no error thrown from ${ fn }`)
+    } catch (e) {
+      errors.push(e.message)
+    }
+  }
+
+  pushError(() => m.takeSync())
+  pushError(() => m.takeSync())
+  pushError(() => m.takeSync())
+
+  t.ok(errors.length == 3)
+  t.ok(errors.indexOf('oops') >= 0 && errors.indexOf('ohno') >= 0 && errors.indexOf('ahah') >= 0)
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 test(`performs as much ops as possible synchronously (one input chan)`, async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
   let inp = chan()

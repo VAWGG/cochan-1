@@ -28,6 +28,18 @@ test(`#canTakeSync is true when there is an outstanding send on a non-buffered c
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`#canTakeSync is true when there is an outstanding send on a non-buffered chan, and changes ` +
+     `to false when this send gets propagated (error case)`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan()
+  ch.sendError(new Error(`oops`))
+  await t.nextTick()
+  t.ok(ch.canTakeSync == true)
+  await ch.take().then(t.fail, t.nop)
+  t.ok(ch.canTakeSync == false)
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 test(`#canTakeSync is true when there is a value buffered in a chan, and changes to false when ` +
      `this value gets consumed`, async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -35,6 +47,17 @@ test(`#canTakeSync is true when there is a value buffered in a chan, and changes
   await ch.send('x')
   t.ok(ch.canTakeSync == true)
   await ch.take()
+  t.ok(ch.canTakeSync == false)
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`#canTakeSync is true when there is a value buffered in a chan, and changes to false when ` +
+     `this value gets consumed (error case)`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan(1)
+  await ch.sendError(new Error(`oops`))
+  t.ok(ch.canTakeSync == true)
+  await ch.take().then(t.fail, t.nop)
   t.ok(ch.canTakeSync == false)
 })
 
@@ -51,12 +74,34 @@ test(`#takeSync() consumes value from a waiting send and returns true`, async t 
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`#takeSync() throws error from a waiting send`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan()
+  let sent = ch.sendError(new Error('oops'))
+  await t.nextTick()
+  t.throws(() => ch.takeSync(), /oops/)
+  t.ok(ch.value === undefined)
+  t.ok(ch.canTakeSync == false)
+  await sent
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 test(`#takeSync() consumes buffered value from a channel and returns true`, async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
   let ch = chan(1)
   await ch.send('x')
   t.ok(ch.takeSync() == true)
   t.ok(ch.value == 'x')
+  t.ok(ch.canTakeSync == false)
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`#takeSync() throws buffered error`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan(1)
+  await ch.sendError(new Error('oops'))
+  t.throws(() => ch.takeSync(), /oops/)
+  t.ok(ch.value === undefined)
   t.ok(ch.canTakeSync == false)
 })
 
@@ -69,7 +114,7 @@ test(`#takeSync() returns false when called on a closed channel`, async t => {
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-test(`#takeSync() returns false and doesn't perform the take when it cannot do it synchronously`,
+test(`#takeSync() returns false and doesn't perform the take when it cannot do that synchronously`,
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 async t => {
   let ch1 = chan(0)
@@ -98,13 +143,20 @@ async t => {
 function consumeSync(ch, t, { max }) {
   let recv = ''
   let i = 0
-  while (ch.takeSync()) {
-    if (++i > max) {
-      return t.fail(`consumed more values (${i}: ${recv}) than expected (${max}), last: ${ch.value}`)
+  while (true) {
+    let value
+    try {
+      if (!ch.takeSync()) {
+        return recv
+      }
+      recv += ch.value
+    } catch (err) {
+      recv += `(${ err.message })`
     }
-    recv += ch.value
+    if (++i > max) {
+      return t.fail(`consumed more values (${i}) than expected (${max}): ${recv}`)
+    }
   }
-  return recv
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -113,12 +165,12 @@ test(`#takeSync() can be called in a loop to consume values from all waiting sen
   let ch = chan()
   let sent = Promise.all([
     ch.send('x'),
-    ch.send('y'),
+    ch.sendError(new Error('y')),
     ch.send('z')
   ])
   await t.nextTick()
   let recv = consumeSync(ch, t, { max: 3 })
-  t.ok(recv == 'xyz')
+  t.ok(recv == 'x(y)z')
   await sent
 })
 
@@ -126,10 +178,10 @@ test(`#takeSync() can be called in a loop to consume values from all waiting sen
 test(`#takeSync() can be called in a loop to consume all buffered values`, async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
   let ch = chan(2)
-  await ch.send('a')
+  await ch.sendError(new Error('a'))
   await ch.send('b')
   let recv = consumeSync(ch, t, { max: 2 })
-  t.ok(recv == 'ab')
+  t.ok(recv == '(a)b')
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -138,21 +190,13 @@ test(`#takeSync() can be called in a loop to consume all buffered values, and th
 ////////////////////////////////////////////////////////////////////////////////////////////////////
   let ch = chan(2)
   ch.send('a')
-  ch.send('b')
+  ch.sendError(new Error('b'))
   let sent = Promise.all([
-    ch.send('c'),
+    ch.sendError(new Error('c')),
     ch.send('d')
   ])
   await t.nextTick()
   let recv = consumeSync(ch, t, { max: 4 })
-  t.ok(recv == 'abcd')
+  t.ok(recv == 'a(b)(c)d')
   await sent
-})
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-test(`#takeSync() throws when the value consumed is an error`, async t => {
-////////////////////////////////////////////////////////////////////////////////////////////////////
-  let ch = chan(1)
-  await ch.sendError(new Error('haba haba'))
-  t.throws(() => ch.takeSync(), /haba haba/)
 })

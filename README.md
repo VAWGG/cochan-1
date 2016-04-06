@@ -826,8 +826,8 @@ All files            |       75 |    63.23 |    65.54 |    75.52 |
 ## TODO
 
 * API docs.
-* Cover with tests: error values, special chans, unidirectional chans, streams,
-  event emitter, iterator/generator.
+* Cover with tests: special chans, unidirectional chans, streams, event emitter,
+  iterator/generator.
 * Provide missing examples for `generators-co` and `plain-promises`.
 * Support [async iteration](https://github.com/tc39/proposal-async-iteration)?
 

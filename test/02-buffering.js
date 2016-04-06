@@ -4,8 +4,8 @@ import chan from '../src'
 test.beforeEach(t => {
   let ctx = t.context
   ctx.sent = ctx.recv = ''
-  ctx.recordSent = v => { ctx.sent += v }
-  ctx.recordRecv = v => { ctx.recv += v }
+  ctx.recordSent = v => { ctx.sent += (v instanceof Error ? `(${ v.message })` : v) }
+  ctx.recordRecv = v => { ctx.recv += (v instanceof Error ? `(${ v.message })` : v) }
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -14,7 +14,7 @@ test(`buffered chan doesn't block sends it can buffer`, async t => {
   let ch = chan(3)
   await ch.send(1)
   await ch.send(2)
-  await ch.send(3)
+  await ch.sendError(new Error())
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -31,13 +31,18 @@ test(`buffered chan starts blocking sends when its buffer gets full`, async t =>
 test(`#take() can consume buffered values without blocking`, async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
   let ch = chan(2)
+  let err = new Error(`oops`)
   ch.send('x')
-  ch.send('y')
+  ch.sendError(err)
   await t.nextTick()
   let x = await ch.take()
-  t.is('x', x)
-  let y = await ch.take()
-  t.is('y', y)
+  t.ok(x == 'x')
+  try {
+    await ch.take()
+    t.fail(`no error thrown`)
+  } catch (e) {
+    t.ok(e === err)
+  }
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -63,31 +68,44 @@ test(`blocked #send(value) calls get unblocked when their values get buffered`, 
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`blocked #sendError(error) calls get unblocked when their values get buffered`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan(1)
+  let errX = new Error(`x`)
+  let errY = new Error(`y`)
+  await ch.sendError(errX) // gets buffered right away, should not block
+  let ySent = ch.sendError(errY) // blocked
+  await ch.take().then(t.fail, t.nop) // this should unblock the second send
+  await ySent // check it's really unblocked
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 test(`#send(value) calls fulfill waiting consumers even if they can be buffered`,
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 async t => {
   let {recordRecv} = t.ctx
   let ch = chan(2)
 
-  ch.take().then(recordRecv).catch(t.fail)
-  ch.take().then(recordRecv).catch(t.fail)
+  ch.take().then(recordRecv, t.fail)
+  ch.take().then(t.fail, recordRecv)
 
   await t.nextTick()
+  let err = new Error(`oops`)
 
   // sent to consumers
   await ch.send('a')
-  await ch.send('b')
+  await ch.sendError(err)
 
-  t.is(t.ctx.recv, 'ab')
+  t.is(t.ctx.recv, 'a(oops)')
 
   // buffered
-  await ch.send('c')
-  await ch.send('d')
+  await ch.sendError(err)
+  await ch.send('b')
 
-  t.is(t.ctx.recv, 'ab')
+  t.is(t.ctx.recv, 'a(oops)')
 
-  t.is(await ch.take(), 'c')
-  t.is(await ch.take(), 'd')
+  t.is(await ch.take().then(t.fail, e => e), err)
+  t.is(await ch.take(), 'b')
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -96,27 +114,28 @@ test(`#send(value) calls fulfill waiting consumers even if they can be buffered 
 async t => {
   let {recordRecv} = t.ctx
   let ch = chan(2)
+  let err = new Error(`oops`)
 
-  ch.take().then(recordRecv).catch(t.fail)
-  ch.take().then(recordRecv).catch(t.fail)
+  ch.take().then(recordRecv, t.fail)
+  ch.take().then(t.fail, recordRecv)
 
   await t.nextTick()
 
   await Promise.all([
     // sent to consumers
     ch.send('a'),
-    ch.send('b'),
+    ch.sendError(err),
     // buffered
-    ch.send('c'),
-    ch.send('d')
+    ch.sendError(err),
+    ch.send('b')
   ])
 
-  t.is(t.ctx.recv, 'ab')
+  t.is(t.ctx.recv, 'a(oops)')
 
-  let cRecv = ch.take()
-  let dRecv = ch.take()
+  let eRecv = ch.take().then(t.fail, e => e)
+  let bRecv = ch.take()
 
-  t.same(await Promise.all([ cRecv, dRecv ]), [ 'c', 'd' ])
+  t.same(await Promise.all([ eRecv, bRecv ]), [ err, 'b' ])
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

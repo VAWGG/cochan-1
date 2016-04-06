@@ -72,7 +72,7 @@ test(`yields error given an op that was initialed not on the current tick`, asyn
   t.throws(() => chan.select(opSend, opTake))
 })
 
-test(`yields error when the same op instance gets passed into two select operations`, async t => {
+test(`throws error when the same op instance gets passed into two select operations`, async t => {
   let chX = chan(1)
   let chY = chan(1)
   let op = chX.send('x')

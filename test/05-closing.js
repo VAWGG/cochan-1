@@ -51,6 +51,54 @@ test(`#closeSync() closes the chan and returns true in the absence of buffered v
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`#closeSync() does nothing and returns false if there is a pending send`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan()
+  let timeline = ''
+
+  ch.send('a').then(v => timeline += v).catch(t.fail)
+  await t.nextTick()
+
+  t.is(false, ch.closeSync())
+  assertActive(ch, t)
+
+  await t.nextTurn()
+  t.is('', timeline)
+  assertActive(ch, t)
+
+  t.ok(ch.takeSync() == true && ch.value == 'a')
+  t.ok(ch.takeSync() == false)
+
+  await t.nextTick()
+  t.is('a', timeline)
+  assertActive(ch, t)
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`#closeSync() does nothing and returns false if there is a pending error send`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan()
+  let timeline = ''
+
+  ch.sendError(new Error('oops')).then(e => timeline += e.message).catch(t.fail)
+  await t.nextTick()
+
+  t.is(false, ch.closeSync())
+  assertActive(ch, t)
+
+  await t.nextTurn()
+  t.is('', timeline)
+  assertActive(ch, t)
+
+  t.throws(() => ch.takeSync(), 'oops')
+  t.ok(ch.takeSync() == false)
+
+  await t.nextTick()
+  t.is('oops', timeline)
+  assertActive(ch, t)
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 test(`#closeSync() does nothing and returns false if there are pending sends`, async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
   let ch = chan()
@@ -77,6 +125,44 @@ test(`#closeSync() does nothing and returns false if there are pending sends`, a
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`#closeSync() does nothing and returns false if there is a buffered value`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan(2)
+
+  ch.sendSync('a')
+  t.is(false, ch.closeSync())
+  assertActive(ch, t)
+  
+  await t.nextTurn()
+  assertActive(ch, t)
+
+  t.ok(ch.takeSync() && ch.value == 'a')
+  t.ok(ch.takeSync() == false)
+
+  await t.nextTick()
+  assertActive(ch, t)
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`#closeSync() does nothing and returns false if there is a buffered error`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan(2)
+
+  ch.sendErrorSync(new Error('oops'))
+  t.is(false, ch.closeSync())
+  assertActive(ch, t)
+  
+  await t.nextTurn()
+  assertActive(ch, t)
+
+  t.throws(() => ch.takeSync(), 'oops')
+  t.ok(ch.takeSync() == false)
+
+  await t.nextTick()
+  assertActive(ch, t)
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 test(`#closeSync() does nothing and returns false if there are buffered values`, async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
   let ch = chan(2)
@@ -95,6 +181,125 @@ test(`#closeSync() does nothing and returns false if there are buffered values`,
 
   await t.nextTick()
   assertActive(ch, t)
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`#close() waits until the only waiting send's value gets consumed`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan()
+  let timeline = ''
+
+  ch.send('a').then(v => timeline += v).catch(t.fail)
+
+  // FIXME: this is needed because #send() waits until next tick before actually
+  // sending anything, which is needed for chan.select() to be able to cancel it
+  // when some op can be performed synchronously. But #close() doesn't perform
+  // equivalent wait, because it doesn't need to. So, if we didn't wait until the
+  // next tick here, #close() would synchronously close the channel before the two
+  // sends above execute, and when they execute, they will attempt to send into
+  // a closed channel and fail.
+  //
+  // This situation is not very counter-intuitive and it would be great to fix it.
+  //
+  // One option is to add wait for the next tick to #close(), but that wouldn't
+  // really fix anything, as there is also #closeSync(), which we cannot delay.
+  //
+  // The other option is to remove wait from #send() and #take(), but then we
+  // lose the ability to pass them into select(), and need to introduce another
+  // way to use send, e.g. chan.select(chan.send(a, 1), chan.take(b)). Which
+  // is really not an option at all.
+  //
+  // The third option is to make #send() and #take() execute only after #then()
+  // is called on their thenables. This is even worse than current situation,
+  // because ch.send('x') is not working anymore, and you need to call
+  // ch.send('x').then() to kickstart it.
+  //
+  // So we need to find some different solution to this.
+  //
+  await t.nextTick()
+  assertActive(ch, t)
+
+  let closed = ch.close().then(_ => timeline += '.').catch(t.fail)
+  assertClosing(ch, t)
+
+  await t.nextTurn()
+  t.is('', timeline)
+  assertClosing(ch, t)
+
+  t.is('a', await ch.take())
+  t.is('a', timeline)
+  assertClosed(ch, t)
+
+  await t.nextTick()
+  t.is('a.', timeline)
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`#close() waits until the only waiting send's value gets consumed (sync take)`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan()
+  let timeline = ''
+
+  ch.send('a').then(v => timeline += v).catch(t.fail)
+  await t.nextTick()
+
+  let closed = ch.close().then(_ => timeline += '.').catch(t.fail)
+  assertClosing(ch, t)
+
+  t.is(true, ch.takeSync())
+  t.is('a', ch.value)
+  assertClosed(ch, t)
+
+  t.is('', timeline)
+  await t.nextTick()
+  t.is('a.', timeline)
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`#close() waits until the only waiting sendError's error gets consumed`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan()
+  let timeline = ''
+
+  ch.sendError(new Error('oops')).then(e => timeline += e.message).catch(t.fail)
+
+  await t.nextTick()
+  assertActive(ch, t)
+
+  let closed = ch.close().then(_ => timeline += '.').catch(t.fail)
+  assertClosing(ch, t)
+
+  await t.nextTurn()
+  t.is('', timeline)
+  assertClosing(ch, t)
+
+  await t.throws(ch.take(), 'oops')
+  assertClosed(ch, t)
+
+  await t.nextTick()
+  t.is('oops.', timeline)
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`#close() waits until the only waiting sendError's error gets consumed (sync take)`,
+  async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan()
+  let timeline = ''
+
+  ch.sendError(new Error('oops')).then(e => timeline += e.message).catch(t.fail)
+  await t.nextTick()
+
+  let closed = ch.close().then(_ => timeline += '.').catch(t.fail)
+  assertClosing(ch, t)
+
+  t.throws(() => ch.takeSync(), 'oops')
+  t.is(undefined, ch.value)
+  assertClosed(ch, t)
+
+  t.is('', timeline)
+  await t.nextTick()
+  t.is('oops.', timeline)
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -177,6 +382,100 @@ test(`#close() waits until all waiting sends' values get consumed (sync take)`, 
   t.is('', timeline)
   await t.nextTick()
   t.is('ab.', timeline)
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`#close() waits until the only buffered value gets consumed`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan(2)
+  let closeUnblocked = false
+
+  await ch.send('x')
+
+  t.ok(closeUnblocked == false)
+  assertActive(ch, t)
+
+  let closed = ch.close().then(_ => closeUnblocked = true).catch(t.fail)
+
+  assertClosing(ch, t)
+  t.ok(closeUnblocked == false)
+
+  await t.nextTurn()
+
+  assertClosing(ch, t)
+  t.ok(closeUnblocked == false)
+
+  t.is('x', await ch.take())
+  assertClosed(ch, t)
+
+  await t.nextTick()
+  t.ok(closeUnblocked == true)
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`#close() waits until the only buffered error gets consumed`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan(2)
+  let closeUnblocked = false
+
+  await ch.sendError(new Error('oops'))
+
+  t.ok(closeUnblocked == false)
+  assertActive(ch, t)
+
+  let closed = ch.close().then(_ => closeUnblocked = true).catch(t.fail)
+
+  assertClosing(ch, t)
+  t.ok(closeUnblocked == false)
+
+  await t.nextTurn()
+
+  assertClosing(ch, t)
+  t.ok(closeUnblocked == false)
+
+  await t.throws(ch.take(), 'oops')
+  assertClosed(ch, t)
+
+  await t.nextTick()
+  t.ok(closeUnblocked == true)
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`#close() waits until the only buffered value gets consumed (sync take)`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan(2)
+  let closeUnblocked = false
+
+  await ch.send('x')
+
+  let closed = ch.close().then(_ => closeUnblocked = true).catch(t.fail)
+  assertClosing(ch, t)
+
+  t.ok(true == ch.takeSync())
+  t.ok('x' == ch.value)
+  assertClosed(ch, t)
+
+  await t.nextTick()
+  t.ok(true == closeUnblocked)
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`#close() waits until the only buffered error gets consumed (sync take)`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan(2)
+  let closeUnblocked = false
+
+  await ch.sendError(new Error('oops'))
+
+  let closed = ch.close().then(_ => closeUnblocked = true).catch(t.fail)
+  assertClosing(ch, t)
+
+  t.throws(() => ch.takeSync(), 'oops')
+  t.ok(undefined === ch.value)
+  assertClosed(ch, t)
+
+  await t.nextTick()
+  t.ok(true == closeUnblocked)
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -348,6 +647,7 @@ test(`sending into a closed channel results in an error`, async t => {
   await ch.close()
   await t.throws(ch.send('x'), /closed channel/)
   await t.throws(ch.send('y'), /closed channel/)
+  await t.throws(ch.sendError(new Error('z')), /closed channel/)
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -358,23 +658,33 @@ test(`sending into a closing channel results in an error`, async t => {
   ch.close()
   await t.throws(ch.send('a'), /closed channel/)
   await t.throws(ch.send('b'), /closed channel/)
+  await t.throws(ch.sendError(new Error('c')), /closed channel/)
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 test(`#closeNow() closes the chan immediately`, async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-  let ch1 = chan(0)
-  let ch2 = chan(1)
+  let ch1v = chan(0)
+  let ch1e = chan(0)
+  let ch2v = chan(1)
+  let ch2e = chan(1)
   let ch3 = chan(0)
 
-  ch1.send('x')
-  ch2.send('y')
+  ch1v.send('x')
+  ch1e.sendError(new Error('x'))
+  ch2v.send('y')
+  ch2e.sendError(new Error('y'))
+
   await t.nextTick()
 
-  ch1.closeNow(); ch2.closeNow(); ch3.closeNow()
+  ch1v.closeNow(); ch1e.closeNow()
+  ch2v.closeNow(); ch2e.closeNow()
+  ch3.closeNow()
 
-  assertClosed(ch1, t)
-  assertClosed(ch2, t)
+  assertClosed(ch1v, t)
+  assertClosed(ch1e, t)
+  assertClosed(ch2v, t)
+  assertClosed(ch2e, t)
   assertClosed(ch3, t)
 })
 
@@ -414,6 +724,24 @@ test(`#closeNow() immediately closes a closing buffered chan`, async t => {
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`#closeNow() immediately closes a closing buffered chan (error value)`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan(1)
+  let closed = false
+
+  ch.sendErrorSync(new Error('oops'))
+
+  ch.close().then(_ => closed = true).catch(t.fail)
+  assertClosing(ch, t)
+
+  ch.closeNow()
+  assertClosed(ch, t)
+
+  await t.nextTick()
+  t.ok(true == closed)
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 test(`#closeNow() immediately closes a closing non-buffered chan, and resolved all waiting ` +
   `sends with an error`, async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -422,6 +750,28 @@ test(`#closeNow() immediately closes a closing non-buffered chan, and resolved a
   let closed = false
 
   ch.send('x').then(t.fail.with(`send succeeded`)).catch(e => sendError = e)
+  await t.nextTick()
+
+  ch.close().then(_ => closed = true).catch(t.fail)
+  assertClosing(ch, t)
+
+  ch.closeNow()
+  assertClosed(ch, t)
+
+  await t.nextTick()
+  t.ok(true == closed)
+  t.ok((sendError instanceof Error) && /closed/.test(sendError.message))
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+test(`#closeNow() immediately closes a closing non-buffered chan, and resolved all waiting ` +
+  `sends with an error (error value)`, async t => {
+////////////////////////////////////////////////////////////////////////////////////////////////////
+  let ch = chan(0)
+  let sendError = { noError: 1 }
+  let closed = false
+
+  ch.sendError(new Error('oops')).then(t.fail.with(`send succeeded`)).catch(e => sendError = e)
   await t.nextTick()
 
   ch.close().then(_ => closed = true).catch(t.fail)
