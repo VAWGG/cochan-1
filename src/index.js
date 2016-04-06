@@ -138,11 +138,11 @@ chan.fromIterable = function fromIterable(iterable, opts) {
     throw new TypeError('global.Symbol.iterator is required to use chan.fromIterable()')
   }
   if (!iterable || 'function' !== typeof iterable[ iteratorSymbol ]) {
-    throw new TypeError(`iterable must be an Iterable; got: ${ gen }`)
+    throw new TypeError(`iterable must be an Iterable; got: ${ iterable }`)
   }
   let iter = iterable[ iteratorSymbol ]()
   if (!isIterator(iter)) {
-    throw new TypeError(`iter must be an iterator; got: ${ iter }`)
+    throw new TypeError(`iterable[ Symbol.iterator ]() must return an iterator; got: ${ iter }`)
   }
   return fromIteratorWithOpts(iter, opts, FROM_ITERABLE_DEFAULTS)
 }
