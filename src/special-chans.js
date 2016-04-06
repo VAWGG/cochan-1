@@ -349,8 +349,7 @@ class OneTimeChanMixin {
         fn(false); return
       }
     }
-    let handler = val => fn(val !== CLOSED)
-    this._addConsumer({ fnVal: handler, fnErr: handler, consumes: false }, false, 0)
+    this._addConsumer({ fnVal: fn, fnErr: fn, consumes: false }, false, 0)
   }
 
   takeSync() {
@@ -412,7 +411,13 @@ class OneTimeChanMixin {
         cIndex = i
       }
     }
-    if (cIndex != -1) {
+    if (cIndex == -1) {
+      consumers = consumers.splice(0)
+      for (let i = 0; i < consumers.length; ++i) {
+        let fn = consumers[i].fnVal
+        fn && fn(true)
+      }
+    } else {
       let cons = consumers.splice(cIndex, 1)[0]
       let fn = this._isError ? cons.fnErr : cons.fnVal
       fn && fn(this._value)
@@ -428,8 +433,8 @@ class OneTimeChanMixin {
     let consumers = this._consumers
     if (!consumers) return
     while (consumers.length) {
-      let {fnVal} = consumers.shift()
-      fnVal && fnVal(CLOSED)
+      let cons = consumers.shift()
+      cons.fnVal && cons.fnVal(cons.consumes ? CLOSED : false)
     }
   }
 }
