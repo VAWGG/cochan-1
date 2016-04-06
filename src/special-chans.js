@@ -75,7 +75,7 @@ export class SpecialChan {
     let ctrName = this._desc ? this._desc.constructorName : this._constructorName
     if (typeof ctrName == 'function') ctrName = ctrName(this)
     if (ctrName == null) ctrName = this.constructor ? this.constructor.name : null
-    throw new Error(`${ what } is unsupported by ${ ctrName || 'unknown_chan_type' }`)
+    throw new Error(`${ what } is not supported by ${ ctrName || 'unknown_chan_type' }`)
   }
 }
 

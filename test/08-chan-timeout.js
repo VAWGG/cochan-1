@@ -15,7 +15,7 @@ test(`chan.timeout(ms[, msg]) creates a special timeout chan`, async t => {
 test(`timeout chan cannot be converted into a send-only one`, async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
   let tch = chan.timeout(100)
-  t.throws(() => tch.sendOnly, /unsupported/)
+  t.throws(() => tch.sendOnly, /not supported/)
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -166,21 +166,21 @@ test(`throws on all attempts to close and send a value`, async t => {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
   let tch = chan.timeout(100)
 
-  t.throws(() => tch.send('x'), /unsupported/)
-  t.throws(() => tch.sendSync('x'), /unsupported/)
-  t.throws(() => tch.close(), /unsupported/)
-  t.throws(() => tch.closeSync(), /unsupported/)
-  t.throws(() => tch.closeNow(), /unsupported/)
+  t.throws(() => tch.send('x'), /not supported/)
+  t.throws(() => tch.sendSync('x'), /not supported/)
+  t.throws(() => tch.close(), /not supported/)
+  t.throws(() => tch.closeSync(), /not supported/)
+  t.throws(() => tch.closeNow(), /not supported/)
 
   await t.sleep(110)
   await t.throws(tch.take(), /timeout/)
   t.throws(() => tch.takeSync(), /timeout/)
 
-  t.throws(() => tch.send('x'), /unsupported/)
-  t.throws(() => tch.sendSync('x'), /unsupported/)
-  t.throws(() => tch.close(), /unsupported/)
-  t.throws(() => tch.closeSync(), /unsupported/)
-  t.throws(() => tch.closeNow(), /unsupported/)
+  t.throws(() => tch.send('x'), /not supported/)
+  t.throws(() => tch.sendSync('x'), /not supported/)
+  t.throws(() => tch.close(), /not supported/)
+  t.throws(() => tch.closeSync(), /not supported/)
+  t.throws(() => tch.closeNow(), /not supported/)
 })
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
