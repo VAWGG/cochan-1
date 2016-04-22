@@ -9,7 +9,11 @@ const EventEmitterMixin = {
         case 1: emitNone(listeners, this); break
         case 2: emitOne(listeners, this, arguments[1]); break
         case 3: emitTwo(listeners, this, arguments[1], arguments[2]); break
-        default: emitMany(listeners, this, Array.apply(null, arguments)); break
+        default: {
+          let args = Array.apply(null, arguments)
+          args.shift()
+          emitMany(listeners, this, args)
+        }
       }
       return true
     }
